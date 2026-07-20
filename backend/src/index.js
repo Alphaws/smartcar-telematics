@@ -295,7 +295,7 @@ app.post('/api/telemetry/ingest', async (req, res) => {
 
   // Security Check: Verify Hardware Secret Token
   if (secret !== expectedSecret && headerSecret !== expectedSecret) {
-    console.warn(`[SECURITY WARN] Érvénytelen hardver kulccsal próbáltak telemetriát küldeni az eszközről: ${deviceId || vin}`);
+    console.warn(`[SECURITY WARN] Érvénytelen hardver kulcs! Received body.secret: "${secret}", headerSecret: "${headerSecret}", expectedSecret: "${expectedSecret}"`);
     return res.status(401).json({ error: 'Érvénytelen hardver hitelesítő kulcs (Unauthorized Device Secret)' });
   }
 
