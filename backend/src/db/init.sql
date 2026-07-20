@@ -76,13 +76,14 @@ VALUES
     ('ford_focus3', 'Ford Focus MK3 / Mondeo MK4 (MS-CAN)', '125kbps', '500kbps', 'testing')
 ON CONFLICT (id) DO NOTHING;
 
--- Seed Default Admin & Customer Accounts
--- admin123 hash: $2a$10$7R81E4jMv5V0Fq2kI0A.xeO1D0gE7V0D4G7H8I9J0K1L2M3N4O5P
+-- Seed Default Admin & Customer Accounts with valid bcrypt hashes
+-- admin123 hash: $2a$10$ptsAmVATYBKAd3KemXq2g.b57hS38VJn6Z0e.2cZK07YenBAdgOT2
+-- user123 hash:  $2a$10$qEf6GosGRzHX2Aip26iL2O1mxo4R3ozjyPOtGWcFTzAwi5fb15VEG
 INSERT INTO users (id, name, email, password_hash, role)
 VALUES 
-    ('usr_admin_1', 'Admin Rendszergazda', 'admin@smartcar.hu', '$2a$10$x8X97bMv5V0Fq2kI0A.xeO1D0gE7V0D4G7H8I9J0K1L2M3N4O5P6', 'admin'),
-    ('usr_imre_2', 'Imre (Mercedes GL Tulajdonos)', 'imre@smartcar.hu', '$2a$10$x8X97bMv5V0Fq2kI0A.xeO1D0gE7V0D4G7H8I9J0K1L2M3N4O5P6', 'user')
-ON CONFLICT (id) DO NOTHING;
+    ('usr_admin_1', 'Admin Rendszergazda', 'admin@smartcar.hu', '$2a$10$ptsAmVATYBKAd3KemXq2g.b57hS38VJn6Z0e.2cZK07YenBAdgOT2', 'admin'),
+    ('usr_imre_2', 'Imre (Mercedes GL Tulajdonos)', 'imre@smartcar.hu', '$2a$10$qEf6GosGRzHX2Aip26iL2O1mxo4R3ozjyPOtGWcFTzAwi5fb15VEG', 'user')
+ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- Seed Default Vehicle (Mercedes GL W164)
 INSERT INTO vehicles (vin, name, plate, owner_id, can_profile_id, device_id, status)
