@@ -5,8 +5,10 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-smartcar_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartcar_secret_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartcar_secret_pass_2026}
       POSTGRES_DB: ${POSTGRES_DB:-smartcar_telematics}
+    ports:
+      - "127.0.0.1:5434:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./backend/src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -58,11 +60,12 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER:-smartcar_user}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-smartcar_secret_pass}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-smartcar_secret_pass_2026}
       - DB_NAME=${POSTGRES_DB:-smartcar_telematics}
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-production_secure_jwt_secret_token_smartcar_2026}
+      - HARDWARE_SECRET=${HARDWARE_SECRET:-smartcar_esp32_hw_secret_key_2026}
     networks:
       - traefik
       - internal-net
