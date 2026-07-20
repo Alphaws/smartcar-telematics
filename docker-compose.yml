@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: smartcar-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - traefik-net
+      - internal-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartcar-backend
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+    networks:
+      - traefik-net
+      - internal-net
+    depends_on:
+      - mosquitto
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.smartcar-api.rule=Host(`api.smartcar.localhost`)"
+      - "traefik.http.routers.smartcar-api.entrypoints=websecure"
+      - "traefik.http.routers.smartcar-api.tls=true"
+      - "traefik.http.services.smartcar-api.loadbalancer.server.port=5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartcar-frontend
+    restart: always
+    networks:
+      - traefik-net
+      - internal-net
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.smartcar-web.rule=Host(`smartcar.localhost`)"
+      - "traefik.http.routers.smartcar-web.entrypoints=websecure"
+      - "traefik.http.routers.smartcar-web.tls=true"
+      - "traefik.http.services.smartcar-web.loadbalancer.server.port=80"
+      # Forward Socket.IO and API calls to backend container
+      - "traefik.http.routers.smartcar-web-api.rule=Host(`smartcar.localhost`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))"
+      - "traefik.http.routers.smartcar-web-api.entrypoints=websecure"
+      - "traefik.http.routers.smartcar-web-api.tls=true"
+      - "traefik.http.routers.smartcar-web-api.service=smartcar-api-service"
+      - "traefik.http.services.smartcar-api-service.loadbalancer.server.port=5000"
+
+networks:
+  traefik-net:
+    external: true
+    name: traefik_traefik-net
+  internal-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
