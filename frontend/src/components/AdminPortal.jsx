@@ -50,7 +50,9 @@ export default function AdminPortal({ token, onLogout }) {
       if (vehiclesData.length > 0) setSelectedVin(vehiclesData[0].vin);
     } catch (err) {
       console.error('Admin data fetch error:', err);
-    } finale();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePairDevice = async (e) => {
