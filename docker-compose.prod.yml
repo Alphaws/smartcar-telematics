@@ -100,6 +100,64 @@ services:
       - "traefik.http.routers.smartcar-web.tls.certresolver=myresolver"
       - "traefik.http.services.smartcar-web.loadbalancer.server.port=80"
 
+  # Production Telematics Hardware Emulators
+  emulator-mercedes:
+    build:
+      context: ./emulator
+      dockerfile: Dockerfile
+    container_name: smartcar-emulator-mercedes
+    restart: always
+    environment:
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - DEVICE_ID=ESP32_W164_001
+      - VIN=WDC1648221A491726
+      - CAR_NAME=Mercedes-Benz GL 320 CDI (W164)
+      - LAT_OFFSET=0
+      - LNG_OFFSET=0
+    networks:
+      - internal-net
+    depends_on:
+      - mosquitto
+      - backend
+
+  emulator-renault:
+    build:
+      context: ./emulator
+      dockerfile: Dockerfile
+    container_name: smartcar-emulator-renault
+    restart: always
+    environment:
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - DEVICE_ID=ESP32_FLUENCE_002
+      - VIN=VF1LZ0B0541234567
+      - CAR_NAME=Renault Fluence 1.5 dCi
+      - LAT_OFFSET=0.012
+      - LNG_OFFSET=-0.015
+    networks:
+      - internal-net
+    depends_on:
+      - mosquitto
+      - backend
+
+  emulator-bmw:
+    build:
+      context: ./emulator
+      dockerfile: Dockerfile
+    container_name: smartcar-emulator-bmw
+    restart: always
+    environment:
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - DEVICE_ID=ESP32_E60_003
+      - VIN=WBANX31000C123456
+      - CAR_NAME=BMW 530d (E60)
+      - LAT_OFFSET=-0.018
+      - LNG_OFFSET=0.020
+    networks:
+      - internal-net
+    depends_on:
+      - mosquitto
+      - backend
+
 networks:
   traefik:
     external: true
