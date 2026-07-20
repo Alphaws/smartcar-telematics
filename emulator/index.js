@@ -1,7 +1,8 @@
-const mqtt = require('mqtt');
+const http = require('http');
+const https = require('https');
 
 // Dynamic Configuration via Environment Variables
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
+const TARGET_API_HOST = process.env.TARGET_API_HOST || 'api-smartcar.prstart.hu';
 const VIN = process.env.VIN || 'WDC1648221A491726';
 const DEVICE_ID = process.env.DEVICE_ID || 'ESP32_EMULATOR_HW_001';
 const CAR_NAME = process.env.CAR_NAME || 'Mercedes-Benz GL 320 CDI (W164)';
@@ -11,14 +12,12 @@ const LAT_OFFSET = parseFloat(process.env.LAT_OFFSET || '0');
 const LNG_OFFSET = parseFloat(process.env.LNG_OFFSET || '0');
 
 console.log('================================================================');
-console.log('      🤖 ESP32 Dual-CAN & 4G Hardver Emulátor szerviz           ');
+console.log('      🤖 ESP32 Dual-CAN & 4G Hardver Emulátor Szolgáltatás       ');
 console.log('================================================================');
-console.log(`[ESP32 HW] Eszköz ID: ${DEVICE_ID}`);
-console.log(`[ESP32 HW] Autó Neve:  ${CAR_NAME}`);
-console.log(`[ESP32 HW] Autó VIN:   ${VIN}`);
-console.log(`[ESP32 HW] Kapcsolódás az MQTT Brokerhez (${MQTT_BROKER_URL})...`);
-
-const client = mqtt.connect(MQTT_BROKER_URL);
+console.log(`[ESP32 HW] Eszköz ID:   ${DEVICE_ID}`);
+console.log(`[ESP32 HW] Autó Neve:    ${CAR_NAME}`);
+console.log(`[ESP32 HW] Autó VIN:     ${VIN}`);
+console.log(`[ESP32 HW] Éles Cél API: https://${TARGET_API_HOST}/api/telemetry/ingest`);
 
 // Base Driving Route (Budapest -> Dunakeszi route points)
 const baseRoutePoints = [
@@ -35,9 +34,9 @@ let routeIndex = Math.floor(Math.random() * baseRoutePoints.length);
 
 // Hardware State
 const hardwareState = {
-  windowsClosed: false,
-  sunroofClosed: false,
-  doorsLocked: false,
+  windowsClosed: true,
+  sunroofClosed: true,
+  doorsLocked: true,
   trunkClosed: true,
   batteryVoltage: 12.6,
   coolantTemp: 88,
@@ -46,50 +45,9 @@ const hardwareState = {
   odometer: 264404
 };
 
-client.on('connect', () => {
-  console.log(`[ESP32 HW ${DEVICE_ID}] ✅ Sikeres MQTTS kapcsolat létrejött!`);
-  
-  // Subscribe to command topic
-  const commandTopic = `smartcar/${VIN}/command`;
-  client.subscribe(commandTopic, (err) => {
-    if (!err) {
-      console.log(`[ESP32 HW ${DEVICE_ID}] 📡 Feliratkozva a parancscsatornára: ${commandTopic}`);
-    }
-  });
-
-  // Start periodic telemetry loop (Every 4 seconds)
-  setInterval(publishTelemetry, 4000);
-});
-
-client.on('message', (topic, message) => {
-  try {
-    const payload = JSON.parse(message.toString());
-    console.log(`\n[ESP32 HW ${DEVICE_ID}] 📩 PARANCS ÉRKEZETT (${topic}):`, payload);
-
-    if (payload.action === 'ROLLUP_WINDOWS') {
-      console.log('  └─► [CAN-B BUSZ] CAN Frame INJEKTÁLÁS: 0x01E0 [ ROLLUP ALL ]');
-      hardwareState.windowsClosed = true;
-      hardwareState.sunroofClosed = true;
-      publishStatus();
-      console.log(`  └─► [ESP32 HW ${DEVICE_ID}] ✅ Ablakok és tolótető sikeresen ZÁRVA!`);
-
-    } else if (payload.action === 'LOCK_DOORS') {
-      console.log('  └─► [CAN-B BUSZ] CAN Frame INJEKTÁLÁS: 0x01A0 [ LOCK ALL ]');
-      hardwareState.doorsLocked = true;
-      publishStatus();
-      console.log(`  └─► [ESP32 HW ${DEVICE_ID}] ✅ Központi zár ZÁRVA!`);
-
-    } else if (payload.action === 'UNLOCK_DOORS') {
-      console.log('  └─► [CAN-B BUSZ] CAN Frame INJEKTÁLÁS: 0x01A0 [ UNLOCK ALL ]');
-      hardwareState.doorsLocked = false;
-      publishStatus();
-      console.log(`  └─► [ESP32 HW ${DEVICE_ID}] 🔓 Központi zár NYITVA!`);
-    }
-
-  } catch (err) {
-    console.error(`[ESP32 HW ${DEVICE_ID}] Parancs feldolgozási hiba:`, err.message);
-  }
-});
+// Start periodic 4G telemetry transmission loop (Every 4 seconds)
+setInterval(publishTelemetry, 4000);
+publishTelemetry();
 
 function publishTelemetry() {
   const basePoint = baseRoutePoints[routeIndex];
@@ -103,25 +61,46 @@ function publishTelemetry() {
   const isMoving = basePoint.speed > 0;
   hardwareState.batteryVoltage = Number((isMoving ? 14.1 + Math.random() * 0.2 : 12.5 + Math.random() * 0.2).toFixed(2));
 
-  const telemetryPayload = {
-    lat: currentLat,
-    lng: currentLng,
-    speed: basePoint.speed,
-    rpm: basePoint.rpm,
-    coolantTemp: hardwareState.coolantTemp,
-    batteryVoltage: hardwareState.batteryVoltage,
-    fuelLevelLiters: hardwareState.fuelLevelLiters,
-    fuelLevelPercent: hardwareState.fuelLevelPercent,
-    odometer: hardwareState.odometer,
-    timestamp: Date.now()
+  const payload = JSON.stringify({
+    vin: VIN,
+    deviceId: DEVICE_ID,
+    telemetry: {
+      lat: currentLat,
+      lng: currentLng,
+      speed: basePoint.speed,
+      rpm: basePoint.rpm,
+      coolantTemp: hardwareState.coolantTemp,
+      batteryVoltage: hardwareState.batteryVoltage,
+      fuelLevelLiters: hardwareState.fuelLevelLiters,
+      fuelLevelPercent: hardwareState.fuelLevelPercent,
+      odometer: hardwareState.odometer
+    }
+  });
+
+  const reqOptions = {
+    hostname: TARGET_API_HOST,
+    port: 443,
+    path: '/api/telemetry/ingest',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    },
+    rejectUnauthorized: false
   };
 
-  const topic = `smartcar/${VIN}/telemetry`;
-  client.publish(topic, JSON.stringify(telemetryPayload));
-  console.log(`[ESP32 HW ${DEVICE_ID} ➔ 4G] Telemetria (${currentLat}, ${currentLng}) | Sebesség: ${basePoint.speed} km/h`);
-}
+  const req = https.request(reqOptions, (res) => {
+    let data = '';
+    res.on('data', chunk => data += chunk);
+    res.on('end', () => {
+      console.log(`[ESP32 HW ${DEVICE_ID} ➔ 4G HTTPS] Telemetria (${currentLat}, ${currentLng}) | Sebesség: ${basePoint.speed} km/h | Status: ${res.statusCode}`);
+    });
+  });
 
-function publishStatus() {
-  const topic = `smartcar/${VIN}/status`;
-  client.publish(topic, JSON.stringify(hardwareState));
+  req.on('error', (err) => {
+    console.error(`[ESP32 HW ${DEVICE_ID}] ⚠️ 4G Küldési hiba:`, err.message);
+  });
+
+  req.write(payload);
+  req.end();
 }

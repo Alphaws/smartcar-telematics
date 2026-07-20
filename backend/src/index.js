@@ -287,6 +287,35 @@ app.get('/api/vehicles/:vin/history', verifyToken, async (req, res) => {
   }
 });
 
+// Universal 4G Telemetry Ingest Endpoint (HTTPS POST)
+app.post('/api/telemetry/ingest', async (req, res) => {
+  const { vin, deviceId, telemetry } = req.body;
+  if (!vin || !telemetry) {
+    return res.status(400).json({ error: 'VIN és telemetria adatok megadása kötelező' });
+  }
+
+  if (vehiclesCache[vin] && vehiclesCache[vin].status === 'online') {
+    vehiclesCache[vin].telemetry = { ...vehiclesCache[vin].telemetry, ...telemetry };
+    vehiclesCache[vin].lastUpdate = new Date().toISOString();
+
+    db.query(
+      `INSERT INTO telemetry_history (vin, lat, lng, speed, rpm, coolant_temp, battery_voltage, fuel_liters, fuel_percent, odometer)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        vin, telemetry.lat, telemetry.lng, telemetry.speed || 0, telemetry.rpm || 0,
+        telemetry.coolantTemp || 85, telemetry.batteryVoltage || 12.6,
+        telemetry.fuelLevelLiters || 50, telemetry.fuelLevelPercent || 65,
+        telemetry.odometer || 264404
+      ]
+    ).catch(e => console.error('[DB] Telemetry insert error:', e.message));
+
+    io.emit('vehicle_update', vehiclesCache[vin]);
+    return res.json({ success: true, message: 'Telemetria sikeresen rögzítve!' });
+  }
+
+  res.status(404).json({ error: 'Jármű nem található vagy nincs aktiválva' });
+});
+
 app.post('/api/vehicles/:vin/command', verifyToken, async (req, res) => {
   const { vin } = req.params;
   const { action } = req.body;

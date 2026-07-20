@@ -1,5 +1,5 @@
 services:
-  # Local Emulators streaming 4G telematics data to the production server at prstart.hu (193.31.27.135)
+  # Local Emulators streaming 4G telematics data via HTTPS to the production server at api-smartcar.prstart.hu
   
   # 1. Emulator: Mercedes-Benz GL 320 CDI
   emulator-mercedes:
@@ -9,7 +9,7 @@ services:
     container_name: smartcar-emulator-mercedes
     restart: always
     environment:
-      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
+      - TARGET_API_HOST=api-smartcar.prstart.hu
       - DEVICE_ID=ESP32_W164_001
       - VIN=WDC1648221A491726
       - CAR_NAME=Mercedes-Benz GL 320 CDI (W164)
@@ -24,7 +24,7 @@ services:
     container_name: smartcar-emulator-renault
     restart: always
     environment:
-      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
+      - TARGET_API_HOST=api-smartcar.prstart.hu
       - DEVICE_ID=ESP32_FLUENCE_002
       - VIN=VF1LZ0B0541234567
       - CAR_NAME=Renault Fluence 1.5 dCi
@@ -39,7 +39,7 @@ services:
     container_name: smartcar-emulator-bmw
     restart: always
     environment:
-      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
+      - TARGET_API_HOST=api-smartcar.prstart.hu
       - DEVICE_ID=ESP32_E60_003
       - VIN=WBANX31000C123456
       - CAR_NAME=BMW 530d (E60)
