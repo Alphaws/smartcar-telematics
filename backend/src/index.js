@@ -295,7 +295,17 @@ app.post('/api/telemetry/ingest', async (req, res) => {
 
   // Security Check: Verify Hardware Secret Token
   if (secret !== expectedSecret && headerSecret !== expectedSecret) {
-    console.warn(`[SECURITY WARN] Érvénytelen hardver kulcs! Received body.secret: "${secret}", headerSecret: "${headerSecret}", expectedSecret: "${expectedSecret}"`);
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    console.warn(`[SECURITY WARN] Érvénytelen hardver kulcs! IP: ${clientIp}, VIN: ${vin || 'ISMERETLEN'}`);
+
+    db.query(
+      `INSERT INTO security_audit_logs (ip_address, event_type, vin, device_id, attempted_secret, user_agent, details)
+       VALUES ($1, 'UNAUTHORIZED_TELEMETRY_ATTEMPT', $2, $3, $4, $5, $6)`,
+      [clientIp, vin || null, deviceId || null, String(secret || headerSecret || 'NONE'), userAgent, 'Hibás vagy hiányzó X-Device-Secret hardver hitelesítő kulcs']
+    ).catch(e => console.error('[SECURITY DB LOG] Error:', e.message));
+
     return res.status(401).json({ error: 'Érvénytelen hardver hitelesítő kulcs (Unauthorized Device Secret)' });
   }
 
@@ -510,6 +520,23 @@ app.post('/api/admin/devices/pair', verifyToken, verifyAdmin, async (req, res) =
   } catch (err) {
     console.error('[ADMIN] Pair device error:', err);
     res.status(500).json({ error: 'Adatbázis hiba az eszköz párosítása során' });
+  }
+});
+
+// Admin Security Audit Logs Endpoint
+app.get('/api/admin/security-logs', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, ip_address as "ipAddress", event_type as "eventType", vin, device_id as "deviceId",
+              attempted_secret as "attemptedSecret", user_agent as "userAgent", details, recorded_at as "recordedAt"
+       FROM security_audit_logs
+       ORDER BY recorded_at DESC
+       LIMIT 200`
+    );
+    res.json({ success: true, logs: result.rows });
+  } catch (err) {
+    console.error('[DB] Security logs query error:', err);
+    res.status(500).json({ error: 'Adatbázis hiba a biztonsági napló lekérdezésekor' });
   }
 });
 

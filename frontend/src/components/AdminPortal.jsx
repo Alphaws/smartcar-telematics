@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Cpu, Users, Radio, PlusCircle, BookOpen, Wrench, FileCode, Zap, 
   CheckCircle, AlertTriangle, RefreshCw, Copy, Check, Link, Car, Info, MapPin, 
-  ArrowRight, Search, Filter, Edit3, Trash2, X, ChevronLeft, ChevronRight, Eye
+  ArrowRight, Search, Filter, Edit3, Trash2, X, ChevronLeft, ChevronRight, Eye, Lock
 } from 'lucide-react';
 
 export default function AdminPortal({ token, onLogout }) {
-  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'vehicles' | 'devices' | 'pairing' | 'docs'
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'vehicles' | 'devices' | 'pairing' | 'docs' | 'security'
   
   // Data States
   const [stats, setStats] = useState(null);
@@ -14,6 +14,7 @@ export default function AdminPortal({ token, onLogout }) {
   const [usersList, setUsersList] = useState([]);
   const [vehiclesList, setVehiclesList] = useState([]);
   const [devicesList, setDevicesList] = useState([]);
+  const [securityLogs, setSecurityLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Search, Filter & Pagination States
@@ -44,12 +45,13 @@ export default function AdminPortal({ token, onLogout }) {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [resStats, resProfiles, resUsers, resVehicles, resDevices] = await Promise.all([
+      const [resStats, resProfiles, resUsers, resVehicles, resDevices, resSecLogs] = await Promise.all([
         fetch('/api/admin/stats', { headers }),
         fetch('/api/admin/can-profiles', { headers }),
         fetch('/api/admin/users', { headers }),
         fetch('/api/admin/vehicles', { headers }),
-        fetch('/api/admin/devices', { headers })
+        fetch('/api/admin/devices', { headers }),
+        fetch('/api/admin/security-logs', { headers })
       ]);
 
       const statsData = await resStats.json();
@@ -57,12 +59,14 @@ export default function AdminPortal({ token, onLogout }) {
       const usersData = await resUsers.json();
       const vehiclesData = await resVehicles.json();
       const devicesData = await resDevices.json();
+      const secLogsData = await resSecLogs.json();
 
       setStats(statsData);
       setCanProfiles(profilesData);
       setUsersList(usersData);
       setVehiclesList(vehiclesData);
       setDevicesList(devicesData);
+      setSecurityLogs(secLogsData.logs || []);
 
       if (profilesData.length > 0) setSelectedCanProfile(profilesData[0].id);
       if (vehiclesData.length > 0) setSelectedVin(vehiclesData[0].vin);
@@ -98,16 +102,16 @@ export default function AdminPortal({ token, onLogout }) {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Biztosan törölni szeretnéd ezt a felhasználót?')) return;
+    if (!window.confirm('Biztosan törölni szeretnéd ezt az ügyfelet?')) return;
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Hiba a törlés során');
-      fetchAdminData();
+      const data = await res.json();
+      if (res.ok) fetchAdminData();
     } catch (err) {
-      alert(err.message);
+      alert('Törlési hiba!');
     }
   };
 
@@ -123,8 +127,7 @@ export default function AdminPortal({ token, onLogout }) {
           name: selectedVehicleModal.name,
           plate: selectedVehicleModal.plate,
           status: selectedVehicleModal.status,
-          deviceId: selectedVehicleModal.deviceId,
-          canProfileId: selectedVehicleModal.canProfileId
+          deviceId: selectedVehicleModal.deviceId
         })
       });
       const data = await res.json();
@@ -138,23 +141,27 @@ export default function AdminPortal({ token, onLogout }) {
   };
 
   const handleDeleteVehicle = async (vin) => {
-    if (!window.confirm(`Biztosan törlöd a(z) ${vin} alvázszámú járművet?`)) return;
+    if (!window.confirm('Biztosan törölni szeretnéd ezt a járművet?')) return;
     try {
       const res = await fetch(`/api/admin/vehicles/${vin}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Hiba a törlés során');
-      fetchAdminData();
+      if (res.ok) fetchAdminData();
     } catch (err) {
-      alert(err.message);
+      alert('Törlési hiba!');
     }
   };
 
-  // Device Pairing Action
+  // Pair Device Form Handler
   const handlePairDevice = async (e) => {
     e.preventDefault();
     setFormMsg(null);
+
+    if (!selectedVin || !deviceIdInput || !selectedCanProfile) {
+      setFormMsg({ type: 'error', text: 'Kérlek töltsd ki az összes mezőt!' });
+      return;
+    }
 
     try {
       const res = await fetch('/api/admin/devices/pair', {
@@ -171,7 +178,7 @@ export default function AdminPortal({ token, onLogout }) {
       });
 
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Sikertelen eszköz párosítás');
+      if (!res.ok || !data.success) throw new Error(data.error || 'Párosítási hiba');
 
       setFormMsg({ type: 'success', text: data.message });
       setDeviceIdInput('');
@@ -182,362 +189,441 @@ export default function AdminPortal({ token, onLogout }) {
   };
 
   // Filtering Logic
-  const filteredUsers = usersList.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          u.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || u.role === statusFilter.toLowerCase();
-    return matchesSearch && matchesStatus;
-  });
-
-  const filteredVehicles = vehiclesList.filter(v => {
-    const matchesSearch = v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          v.vin.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (v.ownerEmail && v.ownerEmail.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = statusFilter === 'ALL' || v.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const filteredDevices = devicesList.filter(d => {
-    const matchesSearch = d.deviceId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          d.vin.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          d.vehicleName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || d.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  // Pagination Slice
-  const getPaginatedData = (dataArray) => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return dataArray.slice(startIndex, startIndex + itemsPerPage);
+  const getFilteredData = (list, type) => {
+    return list.filter(item => {
+      const matchesSearch = searchQuery === '' || Object.values(item).some(val => 
+        String(val).toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter || item.eventType === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
   };
 
-  const getTotalPages = (dataArray) => Math.ceil(dataArray.length / itemsPerPage) || 1;
+  const currentData = activeTab === 'users' ? getFilteredData(usersList, 'users')
+    : activeTab === 'vehicles' ? getFilteredData(vehiclesList, 'vehicles')
+    : activeTab === 'devices' ? getFilteredData(devicesList, 'devices')
+    : activeTab === 'security' ? getFilteredData(securityLogs, 'security')
+    : [];
 
-  if (loading) {
-    return (
-      <div className="app-container" style={{ textAlign: 'center', padding: '100px 0' }}>
-        <RefreshCw className="animate-spin" size={40} style={{ color: '#00f2fe' }} />
-        <h2>Adminisztrációs Adatok Betöltése...</h2>
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(currentData.length / itemsPerPage) || 1;
+  const paginatedData = currentData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="app-container">
-      {/* Admin Header */}
-      <header className="header">
-        <div className="brand">
-          <div className="brand-icon" style={{ background: 'linear-gradient(135deg, #7f53ac, #64748b)' }}>
-            <Shield size={26} />
+    <div className="admin-container">
+      {/* Top Stats Overview */}
+      <div className="admin-stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(0, 242, 254, 0.1)', color: '#00f2fe' }}>
+            <Users size={24} />
           </div>
-          <div className="brand-title">
-            <h1>SmartCar Telematics Admin Konzol</h1>
-            <div className="brand-subtitle">Részletes Ügyfél-, Jármű- és Eszközkezelés</div>
-          </div>
-        </div>
-        <button className="btn-secondary" onClick={onLogout}>Kijelentkezés</button>
-      </header>
-
-      {/* Stats KPI Overview */}
-      {stats && (
-        <div className="telemetry-grid" style={{ marginBottom: '20px' }}>
-          <div className="telemetry-card">
-            <div className="card-label"><Users size={16} /> Összes Ügyfél</div>
-            <div className="card-value" style={{ color: '#00f2fe' }}>{stats.totalUsers}</div>
-          </div>
-          <div className="telemetry-card">
-            <div className="card-label"><Car size={16} /> Regisztrált Járművek</div>
-            <div className="card-value" style={{ color: '#10b981' }}>{stats.totalVehicles}</div>
-          </div>
-          <div className="telemetry-card">
-            <div className="card-label"><Radio size={16} /> Aktív ESP32 Modulok</div>
-            <div className="card-value" style={{ color: '#f59e0b' }}>{stats.onlineDevices}</div>
-          </div>
-          <div className="telemetry-card">
-            <div className="card-label"><Zap size={16} /> MQTT Broker</div>
-            <div className="card-value" style={{ color: stats.mqttStatus === 'connected' ? '#10b981' : '#ef4444' }}>
-              {stats.mqttStatus === 'connected' ? 'OK 🟢' : 'HIBA 🔴'}
-            </div>
+          <div>
+            <div className="stat-label">Regisztrált Ügyfelek</div>
+            <div className="stat-value">{stats ? stats.totalUsers : 0}</div>
           </div>
         </div>
-      )}
 
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', flexWrap: 'wrap' }}>
-        <button 
-          className={`btn-secondary ${activeTab === 'users' ? 'active-tab' : ''}`}
-          onClick={() => { setActiveTab('users'); setCurrentPage(1); setSearchQuery(''); }}
-          style={{ background: activeTab === 'users' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'users' ? '#00f2fe' : undefined }}
-        >
-          <Users size={18} /> 👥 Ügyfelek ({usersList.length})
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+            <Car size={24} />
+          </div>
+          <div>
+            <div className="stat-label">Flotta Járművek</div>
+            <div className="stat-value">{stats ? stats.totalVehicles : 0}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(127, 83, 172, 0.1)', color: '#7f53ac' }}>
+            <Cpu size={24} />
+          </div>
+          <div>
+            <div className="stat-label">Aktivált ESP32 Modulok</div>
+            <div className="stat-value">{devicesList.filter(d => d.status === 'online').length}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+            <Lock size={24} />
+          </div>
+          <div>
+            <div className="stat-label">Kivédett Támadások</div>
+            <div className="stat-value">{securityLogs.length}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Admin Navigation Tabs */}
+      <div className="admin-nav-tabs">
+        <button className={`admin-nav-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => { setActiveTab('users'); setCurrentPage(1); }}>
+          <Users size={18} /> Ügyfelek Kezelése ({usersList.length})
         </button>
-        <button 
-          className={`btn-secondary ${activeTab === 'vehicles' ? 'active-tab' : ''}`}
-          onClick={() => { setActiveTab('vehicles'); setCurrentPage(1); setSearchQuery(''); }}
-          style={{ background: activeTab === 'vehicles' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'vehicles' ? '#00f2fe' : undefined }}
-        >
-          <Car size={18} /> 🚗 Járművek ({vehiclesList.length})
+        <button className={`admin-nav-btn ${activeTab === 'vehicles' ? 'active' : ''}`} onClick={() => { setActiveTab('vehicles'); setCurrentPage(1); }}>
+          <Car size={18} /> Jármű Flotta ({vehiclesList.length})
         </button>
-        <button 
-          className={`btn-secondary ${activeTab === 'devices' ? 'active-tab' : ''}`}
-          onClick={() => { setActiveTab('devices'); setCurrentPage(1); setSearchQuery(''); }}
-          style={{ background: activeTab === 'devices' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'devices' ? '#00f2fe' : undefined }}
-        >
-          <Cpu size={18} /> 📟 Fizikai Eszközök ({devicesList.length})
+        <button className={`admin-nav-btn ${activeTab === 'devices' ? 'active' : ''}`} onClick={() => { setActiveTab('devices'); setCurrentPage(1); }}>
+          <Cpu size={18} /> ESP32 Hardver Eszközök ({devicesList.length})
         </button>
-        <button 
-          className={`btn-secondary ${activeTab === 'pairing' ? 'active-tab' : ''}`}
-          onClick={() => setActiveTab('pairing')}
-          style={{ background: activeTab === 'pairing' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'pairing' ? '#00f2fe' : undefined }}
-        >
-          <Link size={18} /> 🔗 Eszköz Párosítás
+        <button className={`admin-nav-btn ${activeTab === 'pairing' ? 'active' : ''}`} onClick={() => setActiveTab('pairing')}>
+          <Link size={18} /> Eszköz Párosítás
         </button>
-        <button 
-          className={`btn-secondary ${activeTab === 'docs' ? 'active-tab' : ''}`}
-          onClick={() => setActiveTab('docs')}
-          style={{ background: activeTab === 'docs' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'docs' ? '#00f2fe' : undefined }}
-        >
-          <BookOpen size={18} /> 📖 Szerelési Útmutató
+        <button className={`admin-nav-btn ${activeTab === 'security' ? 'active' : ''}`} onClick={() => { setActiveTab('security'); setCurrentPage(1); }}>
+          <Shield size={18} style={{ color: '#ef4444' }} /> 🛡️ Biztonsági Napló ({securityLogs.length})
+        </button>
+        <button className={`admin-nav-btn ${activeTab === 'docs' ? 'active' : ''}`} onClick={() => setActiveTab('docs')}>
+          <BookOpen size={18} /> Szerelési Kézikönyv
         </button>
       </div>
 
-      {/* FILTER & SEARCH BAR FOR TABLES */}
-      {(activeTab === 'users' || activeTab === 'vehicles' || activeTab === 'devices') && (
-        <div style={{ display: 'flex', gap: '16px', margin: '20px 0', alignItems: 'center' }}>
-          <div className="input-group" style={{ flex: 1, margin: 0 }}>
-            <Search size={18} style={{ color: '#94a3b8', marginRight: '8px' }} />
+      {/* Search & Filter Bar (For Tables) */}
+      {['users', 'vehicles', 'devices', 'security'].includes(activeTab) && (
+        <div className="admin-filter-bar">
+          <div className="search-box">
+            <Search size={18} style={{ color: '#94a3b8' }} />
             <input 
               type="text" 
-              placeholder="Keresés névre, emailre, VIN-re, rendszámra vagy Eszköz ID-ra..." 
+              placeholder="Keresés név, alvázszám, IP-cím vagy email alapján..." 
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="filter-box">
             <Filter size={18} style={{ color: '#94a3b8' }} />
-            <select 
-              value={statusFilter} 
-              onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              style={{
-                padding: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '10px',
-                color: '#fff',
-                fontSize: '0.9rem'
-              }}
-            >
-              <option value="ALL" style={{ background: '#0a0e17' }}>Minden Státusz</option>
-              {activeTab === 'users' && (
-                <>
-                  <option value="ADMIN" style={{ background: '#0a0e17' }}>Adminok</option>
-                  <option value="USER" style={{ background: '#0a0e17' }}>Ügyfelek</option>
-                </>
-              )}
-              {(activeTab === 'vehicles' || activeTab === 'devices') && (
-                <>
-                  <option value="online" style={{ background: '#0a0e17' }}>✅ Aktív / Online</option>
-                  <option value="pending_activation" style={{ background: '#0a0e17' }}>⏳ Beszerelésre vár</option>
-                </>
-              )}
+            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
+              <option value="ALL">Összes Állapot</option>
+              <option value="online">Online / Aktivált</option>
+              <option value="pending_activation">Várakozik</option>
+              <option value="UNAUTHORIZED_TELEMETRY_ATTEMPT">Illetéktelen Támadások</option>
             </select>
           </div>
+
+          <button className="btn-secondary" onClick={fetchAdminData} title="Adatok frissítése">
+            <RefreshCw size={16} /> Frissítés
+          </button>
         </div>
       )}
 
-      {/* TAB 1: USERS MANAGEMENT TABLE */}
+      {/* TAB 1: USERS TABLE */}
       {activeTab === 'users' && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><Users size={22} style={{ color: '#00f2fe' }} /> Regisztrált Ügyfelek Adatbázisa</div>
+            <div className="card-title"><Users size={22} /> Ügyfelek és Fiókok</div>
+            <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Megjelenítve: {paginatedData.length} / {currentData.length} fiók</span>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+          <table className="admin-table">
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>ID</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Név</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Email</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Szerepkör</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Járművei</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Műveletek</th>
+              <tr>
+                <th>Ügyfél Név</th>
+                <th>Email Cím</th>
+                <th>Szerepkör</th>
+                <th>Regisztráció</th>
+                <th>Műveletek</th>
               </tr>
             </thead>
             <tbody>
-              {getPaginatedData(filteredUsers).map(u => (
-                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '12px', color: '#94a3b8', fontSize: '0.8rem' }}>{u.id}</td>
-                  <td style={{ padding: '12px', fontWeight: '600', color: '#fff' }}>{u.name}</td>
-                  <td style={{ padding: '12px', color: '#00f2fe' }}>{u.email}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span className="status-badge" style={{ background: u.role === 'admin' ? 'rgba(127,83,172,0.2)' : 'rgba(16,185,129,0.2)', color: u.role === 'admin' ? '#7f53ac' : '#10b981' }}>
-                      {u.role.toUpperCase()}
+              {paginatedData.map(u => (
+                <tr key={u.id}>
+                  <td><strong>{u.name}</strong></td>
+                  <td>{u.email}</td>
+                  <td>
+                    <span className={`badge ${u.role === 'admin' ? 'badge-purple' : 'badge-cyan'}`}>
+                      {u.role === 'admin' ? '👑 Admin' : '👤 Ügyfél'}
                     </span>
                   </td>
-                  <td style={{ padding: '12px' }}>{u.vehicleCount || 0} autó</td>
-                  <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
-                    <button className="btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setSelectedUserModal({ ...u })}>
-                      <Edit3 size={14} /> Módosítás
-                    </button>
-                    <button className="btn-secondary" style={{ padding: '6px 10px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDeleteUser(u.id)}>
-                      <Trash2 size={14} />
-                    </button>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem' }}>{new Date(u.created_at).toLocaleDateString('hu-HU')}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="icon-btn edit" onClick={() => setSelectedUserModal(u)} title="Szerkesztés">
+                        <Edit3 size={16} />
+                      </button>
+                      <button className="icon-btn delete" onClick={() => handleDeleteUser(u.id)} title="Törlés">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Pagination Controls */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.85rem' }}>
-            <div>Összesen {filteredUsers.length} ügyfél (Oldal: {currentPage} / {getTotalPages(filteredUsers)})</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
-                <ChevronLeft size={16} /> Előző
-              </button>
-              <button className="btn-secondary" disabled={currentPage >= getTotalPages(filteredUsers)} onClick={() => setCurrentPage(prev => prev + 1)}>
-                Következő <ChevronRight size={16} />
-              </button>
-            </div>
+          {/* Pagination */}
+          <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={18} /></button>
+            <span>Oldal: {currentPage} / {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={18} /></button>
           </div>
         </div>
       )}
 
-      {/* TAB 2: VEHICLES MANAGEMENT TABLE */}
+      {/* TAB 2: VEHICLES TABLE */}
       {activeTab === 'vehicles' && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><Car size={22} style={{ color: '#10b981' }} /> Flotta Járművek Részletes Listája</div>
+            <div className="card-title"><Car size={22} /> Jármű Flotta</div>
+            <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Megjelenítve: {paginatedData.length} / {currentData.length} jármű</span>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+          <table className="admin-table">
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Jármű Név / Rendszám</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>VIN Alvázszám</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Tulajdonos</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Fizikai Eszköz ID</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Státusz</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Műveletek</th>
+              <tr>
+                <th>Jármű Név</th>
+                <th>Alvázszám (VIN)</th>
+                <th>Rendszám</th>
+                <th>Tulajdonos</th>
+                <th>Eszköz ID</th>
+                <th>Állapot</th>
+                <th>Műveletek</th>
               </tr>
             </thead>
             <tbody>
-              {getPaginatedData(filteredVehicles).map(v => (
-                <tr key={v.vin} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '12px', fontWeight: '600', color: '#fff' }}>
-                    {v.name} <span style={{ color: '#00f2fe' }}>({v.plate})</span>
-                  </td>
-                  <td style={{ padding: '12px', fontFamily: 'JetBrains Mono', fontSize: '0.8rem', color: '#94a3b8' }}>{v.vin}</td>
-                  <td style={{ padding: '12px', color: '#94a3b8' }}>{v.ownerEmail || 'Nincs hozzárendelve'}</td>
-                  <td style={{ padding: '12px', color: '#f59e0b', fontSize: '0.8rem' }}>{v.deviceId}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span className="status-badge" style={{ background: v.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)', color: v.status === 'online' ? '#10b981' : '#f59e0b' }}>
-                      {v.status === 'online' ? '✅ Online' : '⏳ Várakozik'}
+              {paginatedData.map(v => (
+                <tr key={v.vin}>
+                  <td><strong>{v.name}</strong></td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem', color: '#00f2fe' }}>{v.vin}</td>
+                  <td><span className="plate-badge">{v.plate}</span></td>
+                  <td>{v.ownerName || v.ownerEmail}</td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem' }}>{v.deviceId}</td>
+                  <td>
+                    <span className={`badge ${v.status === 'online' ? 'badge-green' : 'badge-yellow'}`}>
+                      {v.status === 'online' ? 'Online ✅' : 'Várakozik ⏳'}
                     </span>
                   </td>
-                  <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
-                    <button className="btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setSelectedVehicleModal({ ...v })}>
-                      <Eye size={14} /> Részletek / Módosítás
-                    </button>
-                    <button className="btn-secondary" style={{ padding: '6px 10px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDeleteVehicle(v.vin)}>
-                      <Trash2 size={14} />
-                    </button>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="icon-btn edit" onClick={() => setSelectedVehicleModal(v)} title="Szerkesztés">
+                        <Edit3 size={16} />
+                      </button>
+                      <button className="icon-btn delete" onClick={() => handleDeleteVehicle(v.vin)} title="Törlés">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Pagination Controls */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.85rem' }}>
-            <div>Összesen {filteredVehicles.length} jármű (Oldal: {currentPage} / {getTotalPages(filteredVehicles)})</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
-                <ChevronLeft size={16} /> Előző
-              </button>
-              <button className="btn-secondary" disabled={currentPage >= getTotalPages(filteredVehicles)} onClick={() => setCurrentPage(prev => prev + 1)}>
-                Következő <ChevronRight size={16} />
-              </button>
-            </div>
+          {/* Pagination */}
+          <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={18} /></button>
+            <span>Oldal: {currentPage} / {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={18} /></button>
           </div>
         </div>
       )}
 
-      {/* TAB 3: DEVICES MANAGEMENT TABLE */}
+      {/* TAB 3: DEVICES TABLE */}
       {activeTab === 'devices' && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><Cpu size={22} style={{ color: '#f59e0b' }} /> Telepített ESP32 Hardver Eszközök</div>
+            <div className="card-title"><Cpu size={22} /> ESP32 Hardver Modulok</div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+          <table className="admin-table">
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Fizikai Eszköz ID / IMEI</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Hozzárendelt Jármű</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>CAN Profil</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Utolsó Kommunikáció</th>
-                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Státusz</th>
+              <tr>
+                <th>Fizikai Eszköz ID</th>
+                <th>Kapcsolódott Jármű</th>
+                <th>CAN Profil</th>
+                <th>Utolsó Kommunikáció</th>
+                <th>Állapot</th>
               </tr>
             </thead>
             <tbody>
-              {getPaginatedData(filteredDevices).map(d => (
-                <tr key={d.deviceId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '12px', fontWeight: '700', color: '#f59e0b', fontFamily: 'JetBrains Mono' }}>{d.deviceId}</td>
-                  <td style={{ padding: '12px', color: '#fff' }}>{d.vehicleName} ({d.plate})</td>
-                  <td style={{ padding: '12px', color: '#00f2fe' }}>{d.canProfileName || 'Alapértelmezett'}</td>
-                  <td style={{ padding: '12px', color: '#94a3b8', fontSize: '0.8rem' }}>{new Date(d.lastPing).toLocaleString('hu-HU')}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span className="status-badge" style={{ background: d.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)', color: d.status === 'online' ? '#10b981' : '#f59e0b' }}>
-                      {d.status === 'online' ? '✅ Aktív MQTTS' : '⏳ Párosításra vár'}
+              {paginatedData.map(d => (
+                <tr key={d.deviceId}>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontWeight: '700', color: '#00f2fe' }}>{d.deviceId}</td>
+                  <td>{d.vehicleName} ({d.plate})</td>
+                  <td>{d.canProfileName}</td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem' }}>{new Date(d.lastPing).toLocaleString('hu-HU')}</td>
+                  <td>
+                    <span className={`badge ${d.status === 'online' ? 'badge-green' : 'badge-yellow'}`}>
+                      {d.status === 'online' ? 'CAN & 4G Active' : 'Offline'}
                     </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={18} /></button>
+            <span>Oldal: {currentPage} / {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={18} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: SECURITY AUDIT LOGS (UNAUTHORIZED TRAFFIC RETRIEVAL) */}
+      {activeTab === 'security' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><Shield size={22} style={{ color: '#ef4444' }} /> Illetéktelen Forgalom & Biztonsági Audit Napló</div>
+            <span style={{ fontSize: '0.85rem', color: '#ef4444' }}>🛡️ Összes Kivédett Támadás: {securityLogs.length}</span>
+          </div>
+
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Időpont</th>
+                <th>Forrás IP-cím</th>
+                <th>Esemény Típusa</th>
+                <th>Alvázszám (VIN)</th>
+                <th>Próbált Hardver Kulcs</th>
+                <th>Részletek</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((log) => (
+                <tr key={log.id}>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem' }}>{new Date(log.recordedAt).toLocaleString('hu-HU')}</td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontWeight: '700', color: '#ef4444' }}>{log.ipAddress}</td>
+                  <td>
+                    <span className="badge badge-yellow" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                      ⚠️ {log.eventType}
+                    </span>
+                  </td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem' }}>{log.vin || 'NEM MEGADOTT'}</td>
+                  <td style={{ fontFamily: 'JetBrains Mono', fontSize: '0.85rem', color: '#94a3b8' }}>{log.attemptedSecret}</td>
+                  <td style={{ fontSize: '0.85rem' }}>{log.details}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination */}
+          <div className="pagination">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={18} /></button>
+            <span>Oldal: {currentPage} / {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={18} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: PAIRING FORM */}
+      {activeTab === 'pairing' && (
+        <div className="card" style={{ maxWidth: '750px', margin: '0 auto' }}>
+          <div className="card-header">
+            <div className="card-title"><Link size={22} /> Hardver Párosítása Járműhöz</div>
+          </div>
+          
+          <form onSubmit={handlePairDevice} className="auth-form" style={{ marginTop: '20px' }}>
+            <div className="input-group">
+              <label>1. Válassz Ügyfél Járművet (VIN):</label>
+              <select value={selectedVin} onChange={e => setSelectedVin(e.target.value)} required>
+                {vehiclesList.map(v => (
+                  <option key={v.vin} value={v.vin}>
+                    {v.name} ({v.plate}) &bull; VIN: {v.vin} [{v.status === 'online' ? 'AKTÍV' : 'VÁRAKOZIK'}]
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="input-group">
+              <label>2. ESP32 Hardver Eszköz Szériaszám / MAC Cím:</label>
+              <input 
+                type="text" 
+                placeholder="Pl. ESP32_HW_84F3EB12A990" 
+                value={deviceIdInput} 
+                onChange={e => setDeviceIdInput(e.target.value)} 
+                required 
+              />
+            </div>
+
+            <div className="input-group">
+              <label>3. CAN Busz Modell Profil:</label>
+              <select value={selectedCanProfile} onChange={e => setSelectedCanProfile(e.target.value)} required>
+                {canProfiles.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (CAN-B: {p.canB_speed}, CAN-C: {p.canC_speed})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {formMsg && (
+              <div className={`status-badge ${formMsg.type === 'success' ? 'badge-green' : 'badge-yellow'}`}>
+                {formMsg.text}
+              </div>
+            )}
+
+            <button type="submit" className="btn-primary full-width" style={{ marginTop: '15px' }}>
+              <Link size={18} /> Eszköz Párosítása és Aktiválása
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 6: WIRING HANDBOOK */}
+      {activeTab === 'docs' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><Wrench size={22} style={{ color: '#00f2fe' }} /> Színes Szervizes Bekötési Kézikönyv</div>
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+            Válassz járműmodellt a pontos szervizes kábelbekötéshez!
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '16px 0' }}>
+            <button className={`btn-secondary ${selectedCarGuide === 'renault_fluence' ? 'active-tab' : ''}`} onClick={() => setSelectedCarGuide('renault_fluence')}>Renault Fluence / Mégane III</button>
+            <button className={`btn-secondary ${selectedCarGuide === 'mb_w164' ? 'active-tab' : ''}`} onClick={() => setSelectedCarGuide('mb_w164')}>Mercedes-Benz GL (W164)</button>
+            <button className={`btn-secondary ${selectedCarGuide === 'bmw_e60' ? 'active-tab' : ''}`} onClick={() => setSelectedCarGuide('bmw_e60')}>BMW 530d (E60)</button>
+            <button className={`btn-secondary ${selectedCarGuide === 'vw_mqb' ? 'active-tab' : ''}`} onClick={() => setSelectedCarGuide('vw_mqb')}>VW Group (MQB)</button>
+            <button className={`btn-secondary ${selectedCarGuide === 'ford_focus3' ? 'active-tab' : ''}`} onClick={() => setSelectedCarGuide('ford_focus3')}>Ford Focus MK3</button>
+          </div>
+
+          <div style={{ background: '#090d16', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+            <h3>Bekötési Pontok ({selectedCarGuide.toUpperCase()})</h3>
+            <p style={{ color: '#94a3b8', margin: '8px 0 16px' }}>
+              Az ESP32 Dual-CAN egységet a megadott utastéri kábelkorbácsokra kell rákötni.
+            </p>
+
+            <div className="telemetry-grid">
+              <div className="telemetry-item">
+                <div className="telemetry-label">12V Tápfeszültség</div>
+                <div className="telemetry-value" style={{ color: '#ef4444' }}>Klíma / OBD Fuse (15A)</div>
+              </div>
+              <div className="telemetry-item">
+                <div className="telemetry-label">CAN-C Motor Busz (500k)</div>
+                <div className="telemetry-value" style={{ color: '#10b981' }}>OBD2 PIN 6 (High) / PIN 14 (Low)</div>
+              </div>
+              <div className="telemetry-item">
+                <div className="telemetry-label">CAN-B Komfort Busz</div>
+                <div className="telemetry-value" style={{ color: '#00f2fe' }}>BSI / SAM Modul 40-pin csatlakozó</div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* EDIT USER MODAL */}
       {selectedUserModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '450px', background: '#0a0e17', border: '1px solid #00f2fe' }}>
-            <div className="card-header">
-              <div className="card-title"><Edit3 size={20} /> Ügyfél Adatainak Módosítása</div>
-              <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setSelectedUserModal(null)}><X size={16} /></button>
-            </div>
-
-            {editFormMsg && (
-              <div style={{ padding: '10px', borderRadius: '8px', background: editFormMsg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: '#fff', margin: '10px 0' }}>
-                {editFormMsg.text}
-              </div>
-            )}
-
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2>Ügyfél Módosítása</h2>
             <form onSubmit={handleSaveUser} className="auth-form">
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Ügyfél Neve:</label>
+                <label>Név:</label>
                 <input type="text" value={selectedUserModal.name} onChange={e => setSelectedUserModal({ ...selectedUserModal, name: e.target.value })} required />
               </div>
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Email Cím:</label>
+                <label>Email:</label>
                 <input type="email" value={selectedUserModal.email} onChange={e => setSelectedUserModal({ ...selectedUserModal, email: e.target.value })} required />
               </div>
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Szerepkör:</label>
-                <select 
-                  value={selectedUserModal.role} 
-                  onChange={e => setSelectedUserModal({ ...selectedUserModal, role: e.target.value })}
-                  style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', borderRadius: '10px', color: '#fff' }}
-                >
-                  <option value="user" style={{ background: '#0a0e17' }}>Ügyfél (User)</option>
-                  <option value="admin" style={{ background: '#0a0e17' }}>Adminisztrátor (Admin)</option>
+                <label>Szerepkör:</label>
+                <select value={selectedUserModal.role} onChange={e => setSelectedUserModal({ ...selectedUserModal, role: e.target.value })}>
+                  <option value="user">👤 Ügyfél</option>
+                  <option value="admin">👑 Adminisztrátor</option>
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              {editFormMsg && <div className="status-badge">{editFormMsg.text}</div>}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button type="submit" className="btn-primary full-width">Mentés</button>
                 <button type="button" className="btn-secondary full-width" onClick={() => setSelectedUserModal(null)}>Mégse</button>
               </div>
@@ -548,181 +634,37 @@ export default function AdminPortal({ token, onLogout }) {
 
       {/* EDIT VEHICLE MODAL */}
       {selectedVehicleModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '500px', background: '#0a0e17', border: '1px solid #10b981' }}>
-            <div className="card-header">
-              <div className="card-title"><Car size={20} /> Jármű Részletei & Módosítása</div>
-              <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setSelectedVehicleModal(null)}><X size={16} /></button>
-            </div>
-
-            {editFormMsg && (
-              <div style={{ padding: '10px', borderRadius: '8px', background: editFormMsg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: '#fff', margin: '10px 0' }}>
-                {editFormMsg.text}
-              </div>
-            )}
-
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2>Jármű Módosítása</h2>
             <form onSubmit={handleSaveVehicle} className="auth-form">
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Jármű Neve:</label>
+                <label>Jármű Név:</label>
                 <input type="text" value={selectedVehicleModal.name} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, name: e.target.value })} required />
               </div>
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Rendszám:</label>
+                <label>Rendszám:</label>
                 <input type="text" value={selectedVehicleModal.plate} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, plate: e.target.value })} required />
               </div>
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Fizikai ESP32 Eszköz ID:</label>
+                <label>Fizikai Eszköz ID:</label>
                 <input type="text" value={selectedVehicleModal.deviceId} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, deviceId: e.target.value })} required />
               </div>
               <div className="input-group">
-                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Aktiválási Státusz:</label>
-                <select 
-                  value={selectedVehicleModal.status} 
-                  onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, status: e.target.value })}
-                  style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', borderRadius: '10px', color: '#fff' }}
-                >
-                  <option value="online" style={{ background: '#0a0e17' }}>✅ Online (Aktiválva)</option>
-                  <option value="pending_activation" style={{ background: '#0a0e17' }}>⏳ Beszerelésre vár</option>
+                <label>Állapot:</label>
+                <select value={selectedVehicleModal.status} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, status: e.target.value })}>
+                  <option value="online">Online / Aktivált ✅</option>
+                  <option value="pending_activation">Szervizes Aktiválásra Vár ⏳</option>
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                <button type="submit" className="btn-primary full-width">Változtatások Mentése</button>
-                <button type="button" className="btn-secondary full-width" onClick={() => setSelectedVehicleModal(null)}>Bezárás</button>
+              {editFormMsg && <div className="status-badge">{editFormMsg.text}</div>}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button type="submit" className="btn-primary full-width">Mentés</button>
+                <button type="button" className="btn-secondary full-width" onClick={() => setSelectedVehicleModal(null)}>Mégse</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: DEVICE PAIRING */}
-      {activeTab === 'pairing' && (
-        <div className="dashboard-grid">
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><Link size={22} /> Hardver Párosítása Járműhöz</div>
-            </div>
-
-            {formMsg && (
-              <div style={{
-                padding: '12px 16px',
-                borderRadius: '10px',
-                backgroundColor: formMsg.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                border: `1px solid ${formMsg.type === 'success' ? '#10b981' : '#ef4444'}`,
-                color: '#fff',
-                fontSize: '0.9rem'
-              }}>
-                {formMsg.text}
-              </div>
-            )}
-
-            <form onSubmit={handlePairDevice} className="auth-form">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Válaszd ki az Ügyfél Járművét:</label>
-                <select 
-                  value={selectedVin} 
-                  onChange={e => setSelectedVin(e.target.value)}
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '10px',
-                    color: '#fff',
-                    fontSize: '0.95rem'
-                  }}
-                >
-                  {vehiclesList.map(v => (
-                    <option key={v.vin} value={v.vin} style={{ background: '#0a0e17' }}>
-                      {v.name} ({v.plate}) — Tulaj: {v.ownerEmail || 'Ismeretlen'} [{v.status === 'online' ? 'AKTÍV ✅' : 'VÁRAKOZIK ⏳'}]
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <input 
-                  type="text" 
-                  placeholder="Fizikai ESP32 Eszköz ID / IMEI (pl. 864920051234567)" 
-                  value={deviceIdInput} 
-                  onChange={e => setDeviceIdInput(e.target.value)} 
-                  required 
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.85rem', color: '#94a3b8' }}>CAN Busz Modell Profil:</label>
-                <select 
-                  value={selectedCanProfile} 
-                  onChange={e => setSelectedCanProfile(e.target.value)}
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '10px',
-                    color: '#fff',
-                    fontSize: '0.95rem'
-                  }}
-                >
-                  {canProfiles.map(p => (
-                    <option key={p.id} value={p.id} style={{ background: '#0a0e17' }}>
-                      {p.name} ({p.canB_speed})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button type="submit" className="btn-primary full-width">
-                Hardver Aktiválása & Párosítása
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: WIRING HANDBOOK */}
-      {activeTab === 'docs' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><Zap size={22} style={{ color: '#00f2fe' }} /> Vizuális Modul Összekötési Blokkvázlat</div>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', margin: '16px 0' }}>
-              <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid #ef4444', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: '700', marginBottom: '10px' }}>
-                  <Zap size={20} /> 1. Autós Tápellátás
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>+12V BATT+:</strong> Fuse Tap adapter a biztosítéktábláról
-                  <br />• <strong>GND:</strong> Karosszéria testcsavar
-                  <br />• <strong>DC-DC Konverter:</strong> 12V ➔ 5V (3A kimenet)
-                </div>
-              </div>
-
-              <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid #00f2fe', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00f2fe', fontWeight: '700', marginBottom: '10px' }}>
-                  <Cpu size={20} /> 2. ESP32-S3 Fővezérlő
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>Táp:</strong> VIN lábra 5V (DC-DC-ből)
-                  <br />• <strong>GPIO 4, 5:</strong> CAN-C (Motor/Diag)
-                  <br />• <strong>GPIO 15,18,19,23:</strong> CAN-B (Komfort SPI)
-                  <br />• <strong>GPIO 16, 17:</strong> 4G Modem (UART)
-                </div>
-              </div>
-
-              <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: '700', marginBottom: '10px' }}>
-                  <Radio size={20} /> 3. 4G LTE & GPS Modem
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>Modell:</strong> A7670E / SIM7600 (Európai)
-                  <br />• <strong>Táp:</strong> 5V kimenet a DC-DC-ből
-                  <br />• <strong>Adat:</strong> MQTTS TLS 1.3 titkosítás
-                  <br />• <strong>GPS Antenna:</strong> Kerámia antenna
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}

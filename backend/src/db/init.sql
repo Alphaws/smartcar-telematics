@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Security Audit Logs Table (Records all unauthorized traffic, bad logins, and intrusion attempts)
+CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id SERIAL PRIMARY KEY,
+    ip_address VARCHAR(64),
+    event_type VARCHAR(64) NOT NULL,
+    vin VARCHAR(64),
+    device_id VARCHAR(64),
+    attempted_secret VARCHAR(255),
+    user_agent VARCHAR(255),
+    details TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Seed Comprehensive CAN Profiles for ALL Supported European & Asian Automotive Platforms
 INSERT INTO can_profiles (id, name, can_b_speed, can_c_speed, status)
 VALUES 
