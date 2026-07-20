@@ -11,14 +11,14 @@ import LandingPage from './components/LandingPage.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import AdminPortal from './components/AdminPortal.jsx';
 
-// Custom Map Marker Icon
+// Self-contained Cyan Car Marker Icon SVG (Zero 404 CDN dependencies)
+const cyanMarkerSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="%2300f2fe" stroke="%23060a12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3" fill="%23060a12"/></svg>`;
+
 const carIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-cyan.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+  iconUrl: cyanMarkerSvg,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36]
 });
 
 function MapRecenter({ lat, lng }) {
