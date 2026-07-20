@@ -287,9 +287,18 @@ app.get('/api/vehicles/:vin/history', verifyToken, async (req, res) => {
   }
 });
 
-// Universal 4G Telemetry Ingest Endpoint (HTTPS POST)
+// Universal 4G Telemetry Ingest Endpoint (Protected with Hardware Secret)
 app.post('/api/telemetry/ingest', async (req, res) => {
-  const { vin, deviceId, telemetry } = req.body;
+  const { vin, deviceId, secret, telemetry } = req.body;
+  const headerSecret = req.headers['x-device-secret'];
+  const expectedSecret = process.env.HARDWARE_SECRET || 'smartcar_esp32_hw_secret_key_2026';
+
+  // Security Check: Verify Hardware Secret Token
+  if (secret !== expectedSecret && headerSecret !== expectedSecret) {
+    console.warn(`[SECURITY WARN] Érvénytelen hardver kulccsal próbáltak telemetriát küldeni az eszközről: ${deviceId || vin}`);
+    return res.status(401).json({ error: 'Érvénytelen hardver hitelesítő kulcs (Unauthorized Device Secret)' });
+  }
+
   if (!vin || !telemetry) {
     return res.status(400).json({ error: 'VIN és telemetria adatok megadása kötelező' });
   }
@@ -310,7 +319,7 @@ app.post('/api/telemetry/ingest', async (req, res) => {
     ).catch(e => console.error('[DB] Telemetry insert error:', e.message));
 
     io.emit('vehicle_update', vehiclesCache[vin]);
-    return res.json({ success: true, message: 'Telemetria sikeresen rögzítve!' });
+    return res.json({ success: true, message: 'Telemetria hitelesítve és rögzítve!' });
   }
 
   res.status(404).json({ error: 'Jármű nem található vagy nincs aktiválva' });

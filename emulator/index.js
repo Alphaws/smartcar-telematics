@@ -3,6 +3,7 @@ const https = require('https');
 
 // Dynamic Configuration via Environment Variables
 const TARGET_API_HOST = process.env.TARGET_API_HOST || 'api-smartcar.prstart.hu';
+const HARDWARE_SECRET = process.env.HARDWARE_SECRET || 'smartcar_esp32_hw_secret_key_2026';
 const VIN = process.env.VIN || 'WDC1648221A491726';
 const DEVICE_ID = process.env.DEVICE_ID || 'ESP32_EMULATOR_HW_001';
 const CAR_NAME = process.env.CAR_NAME || 'Mercedes-Benz GL 320 CDI (W164)';
@@ -17,6 +18,7 @@ console.log('================================================================');
 console.log(`[ESP32 HW] Eszköz ID:   ${DEVICE_ID}`);
 console.log(`[ESP32 HW] Autó Neve:    ${CAR_NAME}`);
 console.log(`[ESP32 HW] Autó VIN:     ${VIN}`);
+console.log(`[ESP32 HW] Hardver Key:  ${HARDWARE_SECRET.substring(0, 8)}... (Hitelesített)`);
 console.log(`[ESP32 HW] Éles Cél API: https://${TARGET_API_HOST}/api/telemetry/ingest`);
 
 // Base Driving Route (Budapest -> Dunakeszi route points)
@@ -64,6 +66,7 @@ function publishTelemetry() {
   const payload = JSON.stringify({
     vin: VIN,
     deviceId: DEVICE_ID,
+    secret: HARDWARE_SECRET,
     telemetry: {
       lat: currentLat,
       lng: currentLng,
@@ -84,6 +87,7 @@ function publishTelemetry() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'X-Device-Secret': HARDWARE_SECRET,
       'Content-Length': Buffer.byteLength(payload)
     },
     rejectUnauthorized: false
@@ -93,7 +97,7 @@ function publishTelemetry() {
     let data = '';
     res.on('data', chunk => data += chunk);
     res.on('end', () => {
-      console.log(`[ESP32 HW ${DEVICE_ID} ➔ 4G HTTPS] Telemetria (${currentLat}, ${currentLng}) | Sebesség: ${basePoint.speed} km/h | Status: ${res.statusCode}`);
+      console.log(`[ESP32 HW ${DEVICE_ID} ➔ 4G HTTPS] Telemetria (${currentLat}, ${currentLng}) | Sebesség: ${basePoint.speed} km/h | Status: ${res.statusCode} (Hitelesítve)`);
     });
   });
 
