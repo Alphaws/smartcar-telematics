@@ -21,21 +21,20 @@ const PORT = process.env.PORT || 5000;
 const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://mosquitto:1883';
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_smartcar_jwt_key_2026';
 
-// Live Vehicle In-Memory Cache (Synced with Postgres)
 let vehiclesCache = {};
 
-// Sync Vehicles & Telemetry from Postgres
+// Sync Vehicles Cache from Postgres
 async function refreshVehiclesCache() {
   try {
     const res = await db.query(`
-      SELECT v.*, cp.name as can_profile_name, u.email as owner_email
+      SELECT v.*, cp.name as can_profile_name, u.email as owner_email, u.name as owner_name
       FROM vehicles v
       LEFT JOIN can_profiles cp ON v.can_profile_id = cp.id
       LEFT JOIN users u ON v.owner_id = u.id
     `);
 
+    vehiclesCache = {};
     for (const row of res.rows) {
-      // Get latest telemetry
       const telRes = await db.query(
         'SELECT * FROM telemetry_history WHERE vin = $1 ORDER BY recorded_at DESC LIMIT 1',
         [row.vin]
@@ -45,7 +44,6 @@ async function refreshVehiclesCache() {
         battery_voltage: 12.6, fuel_liters: 48, fuel_percent: 62, odometer: 264404
       };
 
-      // Get DTC logs
       const dtcRes = await db.query(
         'SELECT code, module, description as desc, severity FROM dtc_logs WHERE vin = $1 ORDER BY recorded_at DESC',
         [row.vin]
@@ -53,12 +51,16 @@ async function refreshVehiclesCache() {
 
       vehiclesCache[row.vin] = {
         id: row.vin,
+        vin: row.vin,
         name: row.name,
         plate: row.plate,
         ownerId: row.owner_id,
+        ownerEmail: row.owner_email,
+        ownerName: row.owner_name,
         canProfileId: row.can_profile_id,
+        canProfileName: row.can_profile_name,
         deviceId: row.device_id,
-        status: row.status,
+        status: row.status, // 'pending_activation' | 'online' | 'offline'
         lastUpdate: row.last_update ? new Date(row.last_update).toISOString() : new Date().toISOString(),
         telemetry: {
           lat: parseFloat(latestTel.lat),
@@ -103,12 +105,11 @@ try {
       const parts = topic.split('/');
       const vin = parts[1];
 
-      if (vehiclesCache[vin]) {
+      if (vehiclesCache[vin] && vehiclesCache[vin].status === 'online') {
         if (topic.endsWith('/telemetry')) {
           vehiclesCache[vin].telemetry = { ...vehiclesCache[vin].telemetry, ...payload };
           vehiclesCache[vin].lastUpdate = new Date().toISOString();
 
-          // Async persist to Postgres
           db.query(
             `INSERT INTO telemetry_history (vin, lat, lng, speed, rpm, coolant_temp, battery_voltage, fuel_liters, fuel_percent, odometer)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -133,7 +134,7 @@ try {
   console.error('[MQTT] Failed:', e.message);
 }
 
-// Middlewares
+// Auth Middlewares
 const verifyToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Nincs megadva hitelesítő token' });
@@ -154,7 +155,7 @@ const verifyAdmin = (req, res, next) => {
   next();
 };
 
-// Auth Routes (Postgres Backed)
+// Auth Routes
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
@@ -213,16 +214,61 @@ app.get('/api/auth/me', verifyToken, (req, res) => {
 });
 
 // Vehicle Routes
-app.get('/api/vehicles', (req, res) => {
-  res.json(Object.values(vehiclesCache));
+app.get('/api/vehicles', verifyToken, (req, res) => {
+  const allVehicles = Object.values(vehiclesCache);
+  if (req.user.role === 'admin') {
+    return res.json(allVehicles);
+  }
+  // User only sees their own vehicles
+  const userVehicles = allVehicles.filter(v => v.ownerId === req.user.id);
+  res.json(userVehicles);
 });
 
-app.post('/api/vehicles/:vin/command', async (req, res) => {
+// Customer adds a new vehicle (Pending Activation)
+app.post('/api/vehicles/register', verifyToken, async (req, res) => {
+  const { name, vin, plate } = req.body;
+  if (!name || !vin || !plate) {
+    return res.status(400).json({ error: 'Név, Alvázszám (VIN) és Rendszám megadása kötelező' });
+  }
+
+  try {
+    const existing = await db.query('SELECT * FROM vehicles WHERE vin = $1', [vin]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Ezzel az alvázszámmal már regisztráltak járművet' });
+    }
+
+    // Temporary dummy device ID until paired by Admin
+    const tempDeviceId = `PENDING_${vin}`;
+
+    await db.query(
+      `INSERT INTO vehicles (vin, name, plate, owner_id, device_id, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending_activation')`,
+      [vin, name, plate, req.user.id, tempDeviceId]
+    );
+
+    await refreshVehiclesCache();
+    io.emit('vehicle_update', vehiclesCache[vin]);
+
+    res.json({
+      success: true,
+      message: 'Jármű adatai rögzítve! A beszereléskor az Adminisztrátor párosítja a fizikai ESP32 eszközt.',
+      vehicle: vehiclesCache[vin]
+    });
+  } catch (err) {
+    console.error('[VEHICLE] Customer register error:', err);
+    res.status(500).json({ error: 'Adatbázis hiba a jármű felvétele során' });
+  }
+});
+
+app.post('/api/vehicles/:vin/command', verifyToken, async (req, res) => {
   const { vin } = req.params;
   const { action } = req.body;
   const vehicle = vehiclesCache[vin];
 
   if (!vehicle) return res.status(404).json({ error: 'Jármű nem található' });
+  if (vehicle.status !== 'online') {
+    return res.status(400).json({ error: 'Ez a jármű még nincs aktiválva vagy nincs rákötve hardver!' });
+  }
 
   if (action === 'ROLLUP_WINDOWS') {
     vehicle.controls.windowsClosed = true;
@@ -247,7 +293,7 @@ app.post('/api/vehicles/:vin/command', async (req, res) => {
   res.json({ success: true, message: `Parancs '${action}' sikeresen elküldve!`, vehicleState: vehicle.controls });
 });
 
-// Admin Routes (Postgres Backed)
+// Admin Routes (Device Provisioning & Pairing)
 app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const uRes = await db.query('SELECT COUNT(*) FROM users');
@@ -284,38 +330,40 @@ app.get('/api/admin/can-profiles', verifyToken, async (req, res) => {
   }
 });
 
-app.post('/api/admin/devices', verifyToken, verifyAdmin, async (req, res) => {
-  const { name, vin, plate, ownerEmail, canProfileId, deviceId } = req.body;
+// Admin Pairs Physical ESP32 Device (IMEI/MAC) & CAN Profile to Customer's Vehicle
+app.post('/api/admin/devices/pair', verifyToken, verifyAdmin, async (req, res) => {
+  const { vin, deviceId, canProfileId } = req.body;
 
-  if (!vin || !name || !deviceId) {
-    return res.status(400).json({ error: 'VIN, Név és Eszköz ID megadása kötelező' });
+  if (!vin || !deviceId || !canProfileId) {
+    return res.status(400).json({ error: 'VIN, Fizikai ESP32 Eszköz ID és CAN Profil megadása kötelező' });
   }
 
   try {
-    const ownerRes = await db.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [ownerEmail]);
-    const ownerId = ownerRes.rows[0]?.id || 'usr_imre_2';
-
     await db.query(
-      `INSERT INTO vehicles (vin, name, plate, owner_id, can_profile_id, device_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'online')
-       ON CONFLICT (vin) DO UPDATE SET name = EXCLUDED.name, plate = EXCLUDED.plate, device_id = EXCLUDED.device_id`,
-      [vin, name, plate || 'NEW-001', ownerId, canProfileId || 'mb_w164', deviceId]
+      `UPDATE vehicles 
+       SET device_id = $1, can_profile_id = $2, status = 'online', last_update = NOW()
+       WHERE vin = $3`,
+      [deviceId, canProfileId, vin]
     );
 
     await refreshVehiclesCache();
     io.emit('vehicle_update', vehiclesCache[vin]);
 
-    res.json({ success: true, message: 'Új eszköz sikeresen regisztrálva az adatbázisban!', vehicle: vehiclesCache[vin] });
+    res.json({
+      success: true,
+      message: `ESP32 Eszköz (${deviceId}) sikeresen párosítva és aktiválva a(z) ${vin} alvázszámú járműhöz!`,
+      vehicle: vehiclesCache[vin]
+    });
   } catch (err) {
-    console.error('[ADMIN] Add device error:', err);
-    res.status(500).json({ error: 'Adatbázis hiba az eszköz regisztrációja során' });
+    console.error('[ADMIN] Pair device error:', err);
+    res.status(500).json({ error: 'Adatbázis hiba az eszköz párosítása során' });
   }
 });
 
 // Periodic Telemetry Simulation
 setInterval(() => {
   const gl = vehiclesCache['WDC1648221A491726'];
-  if (gl) {
+  if (gl && gl.status === 'online') {
     gl.telemetry.lat = Number((gl.telemetry.lat + (Math.random() - 0.5) * 0.0001).toFixed(6));
     gl.telemetry.lng = Number((gl.telemetry.lng + (Math.random() - 0.5) * 0.0001).toFixed(6));
     gl.telemetry.batteryVoltage = Number((12.5 + Math.random() * 0.3).toFixed(2));

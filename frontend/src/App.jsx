@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { 
   Car, Shield, Lock, Unlock, Wind, Gauge, Fuel, Thermometer, 
-  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, UserCheck
+  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, PlusCircle, Clock
 } from 'lucide-react';
 import L from 'leaflet';
 
@@ -32,14 +32,21 @@ function MapRecenter({ lat, lng }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('smartcar_token') || null);
-  const [authModalMode, setAuthModalMode] = useState(null); // 'login' | 'register' | null
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'admin'
+  const [authModalMode, setAuthModalMode] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
-  const [vehicle, setVehicle] = useState(null);
+  const [vehicles, setVehicles] = useState([]);
+  const [selectedVin, setSelectedVin] = useState(null);
   const [loadingAction, setLoadingAction] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Restore User Session from JWT Token
+  // New Vehicle Form State
+  const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState('');
+  const [newVehicleVin, setNewVehicleVin] = useState('');
+  const [newVehiclePlate, setNewVehiclePlate] = useState('');
+
+  // Restore User Session
   useEffect(() => {
     if (token) {
       fetch('/api/auth/me', {
@@ -50,6 +57,7 @@ export default function App() {
           if (data.user) {
             setUser(data.user);
             if (data.user.role === 'admin') setActiveTab('admin');
+            fetchUserVehicles(token);
           } else {
             handleLogout();
           }
@@ -58,6 +66,20 @@ export default function App() {
     }
   }, [token]);
 
+  const fetchUserVehicles = (authToken) => {
+    fetch('/api/vehicles', {
+      headers: { Authorization: `Bearer ${authToken || token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setVehicles(data);
+        if (data.length > 0 && !selectedVin) {
+          setSelectedVin(data[0].vin);
+        }
+      })
+      .catch(err => console.error('Fetch vehicles error:', err));
+  };
+
   // Socket.IO Vehicle Data Subscription
   useEffect(() => {
     const socket = io(window.location.origin, {
@@ -65,20 +87,15 @@ export default function App() {
       transports: ['websocket', 'polling']
     });
 
-    socket.on('vehicles_init', (data) => {
-      if (data && data.length > 0) setVehicle(data[0]);
-    });
-
     socket.on('vehicle_update', (updatedVehicle) => {
-      setVehicle((prev) => (prev?.id === updatedVehicle.id ? updatedVehicle : prev));
+      setVehicles(prev => {
+        const exists = prev.some(v => v.vin === updatedVehicle.vin);
+        if (exists) {
+          return prev.map(v => v.vin === updatedVehicle.vin ? updatedVehicle : v);
+        }
+        return [...prev, updatedVehicle];
+      });
     });
-
-    fetch('/api/vehicles')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.length > 0) setVehicle(data[0]);
-      })
-      .catch((err) => console.error('API Error:', err));
 
     return () => socket.disconnect();
   }, []);
@@ -88,12 +105,15 @@ export default function App() {
     setToken(userToken);
     setAuthModalMode(null);
     setActiveTab(userData.role === 'admin' ? 'admin' : 'dashboard');
+    fetchUserVehicles(userToken);
     showToast(`Üdvözlünk újra, ${userData.name}!`);
   };
 
   const handleLogout = () => {
     setUser(null);
     setToken(null);
+    setVehicles([]);
+    setSelectedVin(null);
     localStorage.removeItem('smartcar_token');
     setActiveTab('dashboard');
     showToast('Kijelentkeztél a rendszerből.');
@@ -118,19 +138,52 @@ export default function App() {
     }
   };
 
+  const handleAddVehicle = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/vehicles/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newVehicleName,
+          vin: newVehicleVin,
+          plate: newVehiclePlate
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Hiba a jármű felvételekor');
+
+      showToast(data.message);
+      setNewVehicleName(''); setNewVehicleVin(''); setNewVehiclePlate('');
+      setShowAddVehicleForm(false);
+      fetchUserVehicles(token);
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
   const handleCommand = async (action) => {
-    if (!vehicle) return;
+    if (!selectedVin) return;
     setLoadingAction(action);
 
     try {
-      const res = await fetch(`/api/vehicles/${vehicle.id}/command`, {
+      const res = await fetch(`/api/vehicles/${selectedVin}/command`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({ action })
       });
       const data = await res.json();
       if (data.success) {
         showToast(data.message);
+      } else {
+        showToast(data.error || 'Hiba a parancs küldése közben!');
       }
     } catch (e) {
       showToast('Hiba a parancs küldése közben!');
@@ -144,7 +197,7 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // If not logged in, render the Landing Page
+  // If not logged in ➔ Show Landing Page
   if (!user) {
     return (
       <>
@@ -164,14 +217,12 @@ export default function App() {
     );
   }
 
-  // If Admin logged in and Admin Tab is selected
+  // If Admin logged in & Admin tab selected
   if (user.role === 'admin' && activeTab === 'admin') {
     return (
       <>
         <div className="admin-subnav" style={{ background: '#0e1626', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#00f2fe' }}>Bejelentkezve: <strong>{user.name}</strong> (👑 Admin)</span>
-          </div>
+          <span style={{ fontSize: '0.85rem', color: '#00f2fe' }}>Bejelentkezve: <strong>{user.name}</strong> (👑 Admin)</span>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button className="btn-secondary" onClick={() => setActiveTab('dashboard')}>
               🚗 Ügyfél Dashboard Nézet
@@ -186,31 +237,42 @@ export default function App() {
     );
   }
 
-  // Customer Vehicle Dashboard View
+  const selectedVehicle = vehicles.find(v => v.vin === selectedVin) || vehicles[0];
+
   return (
     <div className="app-container">
       {/* Header */}
       <header className="header">
         <div className="brand">
-          <div className="brand-icon">
-            <Car size={26} />
-          </div>
+          <div className="brand-icon"><Car size={26} /></div>
           <div className="brand-title">
-            <h1>{vehicle?.name || 'SmartCar Telematics'}</h1>
+            <h1>{selectedVehicle ? selectedVehicle.name : 'SmartCar Telematics'}</h1>
             <div className="brand-subtitle">SmartCar Telematics Platform</div>
           </div>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button className="btn-secondary" onClick={() => setShowAddVehicleForm(true)}>
+            <PlusCircle size={18} /> Új Autó Felvétele
+          </button>
+
           {user.role === 'admin' && (
             <button className="btn-secondary" onClick={() => setActiveTab('admin')}>
               👑 Admin Portál
             </button>
           )}
-          <div className="status-badge">
-            <div className="pulse-dot"></div>
-            CAN-B & GPS Online
-          </div>
+
+          {selectedVehicle && (
+            <div className="status-badge" style={{ 
+              background: selectedVehicle.status === 'online' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+              borderColor: selectedVehicle.status === 'online' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)',
+              color: selectedVehicle.status === 'online' ? '#10b981' : '#f59e0b'
+            }}>
+              <div className="pulse-dot" style={{ backgroundColor: selectedVehicle.status === 'online' ? '#10b981' : '#f59e0b' }}></div>
+              {selectedVehicle.status === 'online' ? 'CAN-B & GPS Online' : '⏳ Szervizes Beszerelésre Vár'}
+            </div>
+          )}
+
           <button className="btn-secondary" onClick={handleLogout} title="Kijelentkezés">
             <LogOut size={18} />
           </button>
@@ -235,15 +297,70 @@ export default function App() {
         </div>
       )}
 
-      {vehicle && (
+      {/* Modal: Add New Vehicle */}
+      {showAddVehicleForm && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2>Új Jármű Felvétele</h2>
+            <p className="modal-subtitle">Add meg a járműved adatait a beszerelés előtt</p>
+
+            <form onSubmit={handleAddVehicle} className="auth-form">
+              <div className="input-group">
+                <input type="text" placeholder="Jármű Megnevezése (pl. BMW 530d)" value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} required />
+              </div>
+              <div className="input-group">
+                <input type="text" placeholder="Alvázszám (VIN - 17 karakter)" value={newVehicleVin} onChange={e => setNewVehicleVin(e.target.value)} required />
+              </div>
+              <div className="input-group">
+                <input type="text" placeholder="Rendszám (pl. XYZ-789)" value={newVehiclePlate} onChange={e => setNewVehiclePlate(e.target.value)} required />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="submit" className="btn-primary full-width">Jármű Rögzítése</button>
+                <button type="button" className="btn-secondary full-width" onClick={() => setShowAddVehicleForm(false)}>Mégse</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* If User Has No Vehicles Yet */}
+      {vehicles.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <Car size={50} style={{ color: '#00f2fe', margin: '0 auto 16px' }} />
+          <h2>Még nincs regisztrált járműved a fiókodban</h2>
+          <p style={{ color: '#94a3b8', margin: '12px 0 24px' }}>
+            Regisztráld az autódat a felületen! A szervizben az Adminisztrátor párosítja majd az ESP32 hardver eszközt.
+          </p>
+          <button className="btn-primary" onClick={() => setShowAddVehicleForm(true)} style={{ width: 'auto', margin: '0 auto' }}>
+            <PlusCircle size={18} /> Új Jármű Felvétele Most
+          </button>
+        </div>
+      )}
+
+      {/* Selected Vehicle Pending Activation View */}
+      {selectedVehicle && selectedVehicle.status === 'pending_activation' && (
+        <div className="card" style={{ textAlign: 'center', padding: '50px 20px', border: '1px solid #f59e0b' }}>
+          <Clock size={48} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
+          <h2>Várakozás szervizes beszerelésre és aktiválásra</h2>
+          <p style={{ color: '#94a3b8', maxWidth: '600px', margin: '12px auto' }}>
+            A(z) <strong>{selectedVehicle.name} ({selectedVehicle.plate})</strong> adatait rögzítettük! Amint az autóvillamossági szervizben beszerelik az ESP32 hardvert, az Adminisztrátor aktiválja az eszközt, és elindul az élő nyomkövetés és távvezérlés.
+          </p>
+          <div style={{ fontSize: '0.85rem', color: '#00f2fe', fontFamily: 'JetBrains Mono' }}>
+            Alvázszám (VIN): {selectedVehicle.vin}
+          </div>
+        </div>
+      )}
+
+      {/* Active Online Vehicle Dashboard View */}
+      {selectedVehicle && selectedVehicle.status === 'online' && (
         <div className="dashboard-grid">
-          {/* Left Column: Remote Controls & Telemetry */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="card">
               <div className="card-header">
                 <div className="card-title"><Shield size={22} /> Távvezérlés (CAN-B Busz)</div>
                 <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                  Ablakok: {vehicle.controls.windowsClosed ? 'Zárva ✅' : 'Nyitva ⚠️'}
+                  Ablakok: {selectedVehicle.controls.windowsClosed ? 'Zárva ✅' : 'Nyitva ⚠️'}
                 </span>
               </div>
               <div className="remote-grid">
@@ -257,11 +374,11 @@ export default function App() {
                 </button>
                 <button 
                   className="action-btn"
-                  onClick={() => handleCommand(vehicle.controls.doorsLocked ? 'UNLOCK_DOORS' : 'LOCK_DOORS')}
+                  onClick={() => handleCommand(selectedVehicle.controls.doorsLocked ? 'UNLOCK_DOORS' : 'LOCK_DOORS')}
                   disabled={loadingAction === 'LOCK_DOORS' || loadingAction === 'UNLOCK_DOORS'}
                 >
-                  {vehicle.controls.doorsLocked ? <Lock style={{ color: '#10b981' }} /> : <Unlock style={{ color: '#ef4444' }} />}
-                  <span>{vehicle.controls.doorsLocked ? 'Ajtók Zárva (Kinyitás)' : 'Ajtók Nyitva (Bezárás)'}</span>
+                  {selectedVehicle.controls.doorsLocked ? <Lock style={{ color: '#10b981' }} /> : <Unlock style={{ color: '#ef4444' }} />}
+                  <span>{selectedVehicle.controls.doorsLocked ? 'Ajtók Zárva (Kinyitás)' : 'Ajtók Nyitva (Bezárás)'}</span>
                 </button>
               </div>
             </div>
@@ -273,44 +390,43 @@ export default function App() {
               <div className="telemetry-grid">
                 <div className="telemetry-item">
                   <div className="telemetry-label"><BatteryCharging size={14} style={{ color: '#00f2fe' }} /> Akku</div>
-                  <div className="telemetry-value">{vehicle.telemetry.batteryVoltage} V</div>
+                  <div className="telemetry-value">{selectedVehicle.telemetry.batteryVoltage} V</div>
                 </div>
                 <div className="telemetry-item">
                   <div className="telemetry-label"><Fuel size={14} style={{ color: '#10b981' }} /> Üzemanyag</div>
-                  <div className="telemetry-value">{vehicle.telemetry.fuelLevelLiters} L ({vehicle.telemetry.fuelLevelPercent}%)</div>
+                  <div className="telemetry-value">{selectedVehicle.telemetry.fuelLevelLiters} L ({selectedVehicle.telemetry.fuelLevelPercent}%)</div>
                 </div>
                 <div className="telemetry-item">
                   <div className="telemetry-label"><Thermometer size={14} style={{ color: '#f59e0b' }} /> Hűtővíz</div>
-                  <div className="telemetry-value">{vehicle.telemetry.coolantTemp} °C</div>
+                  <div className="telemetry-value">{selectedVehicle.telemetry.coolantTemp} °C</div>
                 </div>
                 <div className="telemetry-item">
                   <div className="telemetry-label"><Gauge size={14} style={{ color: '#7f53ac' }} /> Sebesség</div>
-                  <div className="telemetry-value">{vehicle.telemetry.speed} km/h</div>
+                  <div className="telemetry-value">{selectedVehicle.telemetry.speed} km/h</div>
                 </div>
                 <div className="telemetry-item" style={{ gridColumn: 'span 2' }}>
                   <div className="telemetry-label"><Car size={14} style={{ color: '#94a3b8' }} /> Km Óra Állás</div>
-                  <div className="telemetry-value">{vehicle.telemetry.odometer.toLocaleString()} km</div>
+                  <div className="telemetry-value">{selectedVehicle.telemetry.odometer.toLocaleString()} km</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Live GPS Map & Diagnostics */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="card">
               <div className="card-header">
                 <div className="card-title"><MapPin size={22} /> Valós Idejű GPS Nyomkövetés</div>
                 <span style={{ fontSize: '0.8rem', color: '#00f2fe', fontFamily: 'JetBrains Mono' }}>
-                  {vehicle.telemetry.lat}, {vehicle.telemetry.lng}
+                  {selectedVehicle.telemetry.lat}, {selectedVehicle.telemetry.lng}
                 </span>
               </div>
               <div className="map-wrapper">
-                <MapContainer center={[vehicle.telemetry.lat, vehicle.telemetry.lng]} zoom={15} scrollWheelZoom={false}>
+                <MapContainer center={[selectedVehicle.telemetry.lat, selectedVehicle.telemetry.lng]} zoom={15} scrollWheelZoom={false}>
                   <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <Marker position={[vehicle.telemetry.lat, vehicle.telemetry.lng]} icon={carIcon}>
-                    <Popup><strong>{vehicle.name}</strong><br />Rendszám: {vehicle.plate}</Popup>
+                  <Marker position={[selectedVehicle.telemetry.lat, selectedVehicle.telemetry.lng]} icon={carIcon}>
+                    <Popup><strong>{selectedVehicle.name}</strong><br />Rendszám: {selectedVehicle.plate}</Popup>
                   </Marker>
-                  <MapRecenter lat={vehicle.telemetry.lat} lng={vehicle.telemetry.lng} />
+                  <MapRecenter lat={selectedVehicle.telemetry.lat} lng={selectedVehicle.telemetry.lng} />
                 </MapContainer>
               </div>
             </div>
@@ -320,7 +436,7 @@ export default function App() {
                 <div className="card-title"><AlertTriangle size={22} style={{ color: '#f59e0b' }} /> Motordiagnosztika & Hibakódok (DTC)</div>
               </div>
               <div className="dtc-list">
-                {vehicle.dtcList.map((dtc, index) => (
+                {selectedVehicle.dtcList.map((dtc, index) => (
                   <div className="dtc-item" key={index}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span className="dtc-code">{dtc.code}</span>
