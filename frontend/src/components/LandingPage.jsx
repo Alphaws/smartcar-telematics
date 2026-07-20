@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Car, Wind, MapPin, Gauge, Cpu, Check, ArrowRight, Lock, Zap } from 'lucide-react';
+import { Shield, Car, Wind, MapPin, Gauge, Cpu, Check, ArrowRight, Lock, Zap, RefreshCw, Wrench, RotateCcw } from 'lucide-react';
 
 export default function LandingPage({ onOpenLogin, onOpenRegister, onDemoLogin }) {
   return (
@@ -81,8 +81,26 @@ export default function LandingPage({ onOpenLogin, onOpenRegister, onDemoLogin }
       {/* Pricing Section */}
       <section className="pricing-section">
         <div className="section-title">
-          <h2>Válassz <span className="gradient-text">Csomagot</span></h2>
-          <p>Rugalmas előfizetés lakossági felhasználóknak és flottaüzemeltetőknek.</p>
+          <h2>Árazás & <span className="gradient-text">Előfizetési Csomagok</span></h2>
+          <p>Korrekt, átlátható feltételek visszatérítendő hardver letéttel.</p>
+        </div>
+
+        {/* One-time setup costs box */}
+        <div className="setup-cost-box">
+          <div className="setup-item">
+            <RotateCcw className="setup-icon" size={24} />
+            <div>
+              <h4>25 000 Ft — Hardver Letét (Kaució)</h4>
+              <p>Az ESP32 Dual-CAN 4G hardver egység kauciós díja. <strong>Lemondáskor és a készülék visszaszolgáltatásakor 100%-ban visszajár!</strong></p>
+            </div>
+          </div>
+          <div className="setup-item">
+            <Wrench className="setup-icon" size={24} />
+            <div>
+              <h4>20 000 Ft — Szakszerű Beszerelési Munkadíj</h4>
+              <p>Egyszeri, szakszerű beszerelési és járműspecifikus kódolási költség az autóvillamossági műhelyben.</p>
+            </div>
+          </div>
         </div>
 
         <div className="pricing-grid">
@@ -92,10 +110,12 @@ export default function LandingPage({ onOpenLogin, onOpenRegister, onDemoLogin }
               <div className="price">4 900 Ft <span>/ hó</span></div>
             </div>
             <ul className="price-features">
-              <li><Check size={16} /> 1 Jármű teljes vezérlése</li>
-              <li><Check size={16} /> Ablak- és zár távvezérlés</li>
-              <li><Check size={16} /> Élő GPS Nyomkövetés</li>
+              <li><Check size={16} /> 1 Jármű teljes távvezérlése</li>
+              <li><Check size={16} /> Ablakok, zárak és tető irányítás</li>
+              <li><Check size={16} /> Élő GPS Nyomkövetés & Térkép</li>
               <li><Check size={16} /> Push / Telegram Értesítések</li>
+              <li><RotateCcw size={16} /> +25 000 Ft Visszatérítendő Hardver Letét</li>
+              <li><Wrench size={16} /> +20 000 Ft Egyszeri Beszerelési Munkadíj</li>
             </ul>
             <button className="btn-price" onClick={onOpenRegister}>Megrendelés</button>
           </div>
@@ -111,6 +131,8 @@ export default function LandingPage({ onOpenLogin, onOpenRegister, onDemoLogin }
               <li><Check size={16} /> Admin Portál & Ügyfélkezelés</li>
               <li><Check size={16} /> Telemetria Export & API hozzáférés</li>
               <li><Check size={16} /> Egyedi CAN profil támogatás</li>
+              <li><RotateCcw size={16} /> +25 000 Ft / autó Visszatérítendő Letét</li>
+              <li><Wrench size={16} /> Kedvezményes Flotta Beszerelés</li>
             </ul>
             <button className="btn-price primary" onClick={onOpenRegister}>Flotta Indítása</button>
           </div>

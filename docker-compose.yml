@@ -32,6 +32,7 @@ services:
       - mosquitto
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
       - "traefik.http.routers.smartcar-api.rule=Host(`api.smartcar.localhost`)"
       - "traefik.http.routers.smartcar-api.entrypoints=websecure"
       - "traefik.http.routers.smartcar-api.tls=true"
@@ -50,6 +51,7 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
       - "traefik.http.routers.smartcar-web.rule=Host(`smartcar.localhost`)"
       - "traefik.http.routers.smartcar-web.entrypoints=websecure"
       - "traefik.http.routers.smartcar-web.tls=true"
