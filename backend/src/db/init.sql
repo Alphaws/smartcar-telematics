@@ -67,14 +67,19 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed CAN Profiles for ALL Supported Models
+-- Seed Comprehensive CAN Profiles for ALL Supported European & Asian Automotive Platforms
 INSERT INTO can_profiles (id, name, can_b_speed, can_c_speed, status)
 VALUES 
-    ('renault_fluence', 'Renault Fluence / Mégane III (2009–2016)', '250kbps', '500kbps', 'verified'),
-    ('mb_w164', 'Mercedes-Benz GL / ML (W164 / X164)', '83.3kbps', '500kbps', 'verified'),
-    ('bmw_e60', 'BMW 5 Series / 3 Series (E60 / E90 K-CAN)', '100kbps', '500kbps', 'verified'),
-    ('vw_mqb', 'Volkswagen / Audi / Skoda (MQB Platform)', '500kbps', '500kbps', 'verified'),
-    ('ford_focus3', 'Ford Focus MK3 / Mondeo MK4 (MS-CAN)', '125kbps', '500kbps', 'testing')
+    ('renault_fluence', 'Renault Fluence / Mégane III / Scénic III (2008–2016)', '250kbps', '500kbps', 'verified'),
+    ('renault_clio4', 'Renault Clio IV / Captur I / Dacia Duster II', '250kbps', '500kbps', 'verified'),
+    ('mb_w164', 'Mercedes-Benz ML / GL / R-Class (W164 / X164 / W251)', '83.3kbps', '500kbps', 'verified'),
+    ('mb_w212', 'Mercedes-Benz E-Class / C-Class (W211 / W212 / W204)', '83.3kbps', '500kbps', 'verified'),
+    ('bmw_e60', 'BMW 5 / 3 / 1 Series (E60 / E90 / E87 K-CAN)', '100kbps', '500kbps', 'verified'),
+    ('bmw_f30', 'BMW 3 / 4 / 5 Series (F30 / F10 / F15 K-CAN2)', '500kbps', '500kbps', 'verified'),
+    ('vw_mqb', 'Volkswagen / Audi / Skoda / Seat (MQB & PQ35 Platform)', '500kbps', '500kbps', 'verified'),
+    ('ford_focus3', 'Ford Focus MK2/MK3 / Mondeo MK4 / Kuga (MS-CAN)', '125kbps', '500kbps', 'verified'),
+    ('nissan_qashqai', 'Nissan Qashqai J10/J11 / X-Trail T31/T32', '250kbps', '500kbps', 'verified'),
+    ('opel_astra_j', 'Opel / Vauxhall Astra J / Insignia A (Single-Wire CAN)', '33.3kbps', '500kbps', 'testing')
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Default Admin & Customer Accounts
