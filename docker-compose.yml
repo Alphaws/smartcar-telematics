@@ -1,6 +1,43 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartcar-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: smartcar_user
+      POSTGRES_PASSWORD: smartcar_secret_pass
+      POSTGRES_DB: smartcar_telematics
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcar_user -d smartcar_telematics"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartcar-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal-net
+
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: smartcar-mosquitto
@@ -24,12 +61,23 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=smartcar_user
+      - DB_PASSWORD=smartcar_secret_pass
+      - DB_NAME=smartcar_telematics
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - REDIS_URL=redis://redis:6379
     networks:
       - traefik-net
       - internal-net
     depends_on:
-      - mosquitto
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
@@ -69,6 +117,7 @@ services:
       - internal-net
     depends_on:
       - mosquitto
+      - backend
 
 networks:
   traefik-net:
@@ -79,3 +128,5 @@ networks:
 
 volumes:
   mosquitto-data:
+  postgres-data:
+  redis-data:
