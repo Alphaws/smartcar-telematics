@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import { 
   Car, Shield, Lock, Unlock, Wind, Gauge, Fuel, Thermometer, 
-  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, PlusCircle, Clock, ChevronDown
+  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, PlusCircle, Clock, Calendar, History
 } from 'lucide-react';
 import L from 'leaflet';
 
@@ -39,6 +39,11 @@ export default function App() {
   const [selectedVin, setSelectedVin] = useState(null);
   const [loadingAction, setLoadingAction] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // History State
+  const [historyRange, setHistoryRange] = useState('24h'); // '24h', '7d', '30d', '1y'
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // New Vehicle Form State
   const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
@@ -78,6 +83,28 @@ export default function App() {
         }
       })
       .catch(err => console.error('Fetch vehicles error:', err));
+  };
+
+  // Fetch Telemetry History when Selected Vehicle or History Range Changes
+  useEffect(() => {
+    if (selectedVin && token) {
+      fetchHistory(selectedVin, historyRange);
+    }
+  }, [selectedVin, historyRange, token]);
+
+  const fetchHistory = (vin, range) => {
+    setHistoryLoading(true);
+    fetch(`/api/vehicles/${vin}/history?range=${range}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setHistoryData(data.history || []);
+        }
+      })
+      .catch(err => console.error('Fetch history error:', err))
+      .finally(() => setHistoryLoading(false));
   };
 
   // Socket.IO Vehicle Data Subscription
@@ -238,6 +265,7 @@ export default function App() {
   }
 
   const selectedVehicle = vehicles.find(v => v.vin === selectedVin) || vehicles[0];
+  const polylinePositions = historyData.map(h => [parseFloat(h.lat), parseFloat(h.lng)]);
 
   return (
     <div className="app-container">
@@ -459,12 +487,61 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* TELEMETRY HISTORY & ROUTE TRACKING CARD (RETRIEVE UP TO 1 YEAR BACK) */}
+            <div className="card">
+              <div className="card-header" style={{ flexWrap: 'wrap', gap: '10px' }}>
+                <div className="card-title"><History size={22} style={{ color: '#00f2fe' }} /> Telemetria Előzmények & Nyomvonal</div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button className={`btn-secondary ${historyRange === '24h' ? 'active-tab' : ''}`} onClick={() => setHistoryRange('24h')}>24 Óra</button>
+                  <button className={`btn-secondary ${historyRange === '7d' ? 'active-tab' : ''}`} onClick={() => setHistoryRange('7d')}>7 Nap</button>
+                  <button className={`btn-secondary ${historyRange === '30d' ? 'active-tab' : ''}`} onClick={() => setHistoryRange('30d')}>30 Nap</button>
+                  <button className={`btn-secondary ${historyRange === '1y' ? 'active-tab' : ''}`} onClick={() => setHistoryRange('1y')}>1 Év</button>
+                </div>
+              </div>
+
+              {historyLoading ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Előzmények betöltése az adatbázisból...</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                    Rögzített telemetriai adatpontok a kiválasztott időszakban: <strong style={{ color: '#00f2fe' }}>{historyData.length} rekord</strong> (Adatbázisban tárolva 1 évig)
+                  </div>
+                  {historyData.length > 0 && (
+                    <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', fontSize: '0.8rem', textWrap: 'nowrap' }}>
+                        <thead>
+                          <tr style={{ background: '#0e1626', color: '#94a3b8', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 10px' }}>Időpont</th>
+                            <th style={{ padding: '6px 10px' }}>Sebesség</th>
+                            <th style={{ padding: '6px 10px' }}>Akku</th>
+                            <th style={{ padding: '6px 10px' }}>Üzemanyag</th>
+                            <th style={{ padding: '6px 10px' }}>GPS Pozíció</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historyData.slice(-10).reverse().map((row, idx) => (
+                            <tr key={idx} style={{ borderTop: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono' }}>{new Date(row.recorded_at).toLocaleString('hu-HU')}</td>
+                              <td style={{ padding: '6px 10px' }}>{row.speed} km/h</td>
+                              <td style={{ padding: '6px 10px' }}>{row.batteryVoltage} V</td>
+                              <td style={{ padding: '6px 10px' }}>{row.fuelLevelPercent}%</td>
+                              <td style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono', color: '#00f2fe' }}>{row.lat}, {row.lng}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="card">
               <div className="card-header">
-                <div className="card-title"><MapPin size={22} /> Valós Idejű GPS Nyomkövetés</div>
+                <div className="card-title"><MapPin size={22} /> Valós Idejű GPS Nyomkövetés & Nyomvonal</div>
                 <span style={{ fontSize: '0.8rem', color: '#00f2fe', fontFamily: 'JetBrains Mono' }}>
                   {selectedVehicle.telemetry.lat}, {selectedVehicle.telemetry.lng}
                 </span>
@@ -472,6 +549,12 @@ export default function App() {
               <div className="map-wrapper">
                 <MapContainer center={[selectedVehicle.telemetry.lat, selectedVehicle.telemetry.lng]} zoom={15} scrollWheelZoom={false}>
                   <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  
+                  {/* Historical Route Polyline (1 Year Route History) */}
+                  {polylinePositions.length > 1 && (
+                    <Polyline positions={polylinePositions} color="#00f2fe" weight={4} opacity={0.8} />
+                  )}
+
                   <Marker position={[selectedVehicle.telemetry.lat, selectedVehicle.telemetry.lng]} icon={carIcon}>
                     <Popup><strong>{selectedVehicle.name}</strong><br />Rendszám: {selectedVehicle.plate}</Popup>
                   </Marker>

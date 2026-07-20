@@ -258,6 +258,35 @@ app.post('/api/vehicles/register', verifyToken, async (req, res) => {
   }
 });
 
+// Telemetry History Endpoint (Retrieves telemetry logs up to 1 year back)
+app.get('/api/vehicles/:vin/history', verifyToken, async (req, res) => {
+  const { vin } = req.params;
+  const { range } = req.query; // '24h', '7d', '30d', '1y'
+
+  let timeFilter = "NOW() - INTERVAL '24 hours'";
+  if (range === '7d') timeFilter = "NOW() - INTERVAL '7 days'";
+  if (range === '30d') timeFilter = "NOW() - INTERVAL '30 days'";
+  if (range === '1y') timeFilter = "NOW() - INTERVAL '1 year'";
+
+  try {
+    const result = await db.query(
+      `SELECT recorded_at, lat, lng, speed, rpm, coolant_temp as "coolantTemp",
+              battery_voltage as "batteryVoltage", fuel_liters as "fuelLevelLiters",
+              fuel_percent as "fuelLevelPercent", odometer
+       FROM telemetry_history
+       WHERE vin = $1 AND recorded_at >= ${timeFilter}
+       ORDER BY recorded_at ASC
+       LIMIT 2000`,
+      [vin]
+    );
+
+    res.json({ success: true, count: result.rows.length, history: result.rows });
+  } catch (err) {
+    console.error('[DB] History query error:', err);
+    res.status(500).json({ error: 'Adatbázis hiba az előzmények lekérdezésekor' });
+  }
+});
+
 app.post('/api/vehicles/:vin/command', verifyToken, async (req, res) => {
   const { vin } = req.params;
   const { action } = req.body;
