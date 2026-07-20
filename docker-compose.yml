@@ -57,6 +57,19 @@ services:
       - "traefik.http.routers.smartcar-web.tls=true"
       - "traefik.http.services.smartcar-web.loadbalancer.server.port=80"
 
+  emulator:
+    build:
+      context: ./emulator
+      dockerfile: Dockerfile
+    container_name: smartcar-esp32-emulator
+    restart: always
+    environment:
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+    networks:
+      - internal-net
+    depends_on:
+      - mosquitto
+
 networks:
   traefik-net:
     external: true
