@@ -1,24 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Cpu, Users, Radio, PlusCircle, BookOpen, Wrench, FileCode, Zap, 
-  CheckCircle, AlertTriangle, RefreshCw, Copy, Check, Link, Car, Info, MapPin, ArrowRight
+  CheckCircle, AlertTriangle, RefreshCw, Copy, Check, Link, Car, Info, MapPin, 
+  ArrowRight, Search, Filter, Edit3, Trash2, X, ChevronLeft, ChevronRight, Eye
 } from 'lucide-react';
 
 export default function AdminPortal({ token, onLogout }) {
-  const [activeTab, setActiveTab] = useState('docs'); 
-  const [selectedCarGuide, setSelectedCarGuide] = useState('renault_fluence'); 
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'vehicles' | 'devices' | 'pairing' | 'docs'
   
+  // Data States
   const [stats, setStats] = useState(null);
   const [canProfiles, setCanProfiles] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [vehiclesList, setVehiclesList] = useState([]);
+  const [devicesList, setDevicesList] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Search, Filter & Pagination States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  // Modal Editing States
+  const [selectedUserModal, setSelectedUserModal] = useState(null);
+  const [selectedVehicleModal, setSelectedVehicleModal] = useState(null);
+  const [selectedDeviceModal, setSelectedDeviceModal] = useState(null);
+  const [editFormMsg, setEditFormMsg] = useState(null);
 
   // Device Pairing Form State
   const [selectedVin, setSelectedVin] = useState('');
-  const [deviceId, setDeviceId] = useState('');
+  const [deviceIdInput, setDeviceIdInput] = useState('');
   const [selectedCanProfile, setSelectedCanProfile] = useState('');
   const [formMsg, setFormMsg] = useState(null);
+  const [selectedCarGuide, setSelectedCarGuide] = useState('renault_fluence');
 
   useEffect(() => {
     fetchAdminData();
@@ -29,22 +44,25 @@ export default function AdminPortal({ token, onLogout }) {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [resStats, resProfiles, resUsers, resVehicles] = await Promise.all([
+      const [resStats, resProfiles, resUsers, resVehicles, resDevices] = await Promise.all([
         fetch('/api/admin/stats', { headers }),
         fetch('/api/admin/can-profiles', { headers }),
         fetch('/api/admin/users', { headers }),
-        fetch('/api/vehicles', { headers })
+        fetch('/api/admin/vehicles', { headers }),
+        fetch('/api/admin/devices', { headers })
       ]);
 
       const statsData = await resStats.json();
       const profilesData = await resProfiles.json();
       const usersData = await resUsers.json();
       const vehiclesData = await resVehicles.json();
+      const devicesData = await resDevices.json();
 
       setStats(statsData);
       setCanProfiles(profilesData);
       setUsersList(usersData);
       setVehiclesList(vehiclesData);
+      setDevicesList(devicesData);
 
       if (profilesData.length > 0) setSelectedCanProfile(profilesData[0].id);
       if (vehiclesData.length > 0) setSelectedVin(vehiclesData[0].vin);
@@ -55,6 +73,85 @@ export default function AdminPortal({ token, onLogout }) {
     }
   };
 
+  // User Actions (Edit / Delete)
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    setEditFormMsg(null);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUserModal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: selectedUserModal.name,
+          email: selectedUserModal.email,
+          role: selectedUserModal.role
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sikertelen mentés');
+      
+      setEditFormMsg({ type: 'success', text: data.message });
+      setTimeout(() => { setSelectedUserModal(null); fetchAdminData(); }, 1200);
+    } catch (err) {
+      setEditFormMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Biztosan törölni szeretnéd ezt a felhasználót?')) return;
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Hiba a törlés során');
+      fetchAdminData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Vehicle Actions (Edit / Delete)
+  const handleSaveVehicle = async (e) => {
+    e.preventDefault();
+    setEditFormMsg(null);
+    try {
+      const res = await fetch(`/api/admin/vehicles/${selectedVehicleModal.vin}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: selectedVehicleModal.name,
+          plate: selectedVehicleModal.plate,
+          status: selectedVehicleModal.status,
+          deviceId: selectedVehicleModal.deviceId,
+          canProfileId: selectedVehicleModal.canProfileId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sikertelen mentés');
+
+      setEditFormMsg({ type: 'success', text: data.message });
+      setTimeout(() => { setSelectedVehicleModal(null); fetchAdminData(); }, 1200);
+    } catch (err) {
+      setEditFormMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleDeleteVehicle = async (vin) => {
+    if (!window.confirm(`Biztosan törlöd a(z) ${vin} alvázszámú járművet?`)) return;
+    try {
+      const res = await fetch(`/api/admin/vehicles/${vin}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Hiba a törlés során');
+      fetchAdminData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // Device Pairing Action
   const handlePairDevice = async (e) => {
     e.preventDefault();
     setFormMsg(null);
@@ -68,7 +165,7 @@ export default function AdminPortal({ token, onLogout }) {
         },
         body: JSON.stringify({
           vin: selectedVin,
-          deviceId,
+          deviceId: deviceIdInput,
           canProfileId: selectedCanProfile
         })
       });
@@ -77,12 +174,45 @@ export default function AdminPortal({ token, onLogout }) {
       if (!res.ok || !data.success) throw new Error(data.error || 'Sikertelen eszköz párosítás');
 
       setFormMsg({ type: 'success', text: data.message });
-      setDeviceId('');
+      setDeviceIdInput('');
       fetchAdminData();
     } catch (err) {
       setFormMsg({ type: 'error', text: err.message });
     }
   };
+
+  // Filtering Logic
+  const filteredUsers = usersList.filter(u => {
+    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          u.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || u.role === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredVehicles = vehiclesList.filter(v => {
+    const matchesSearch = v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          v.vin.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (v.ownerEmail && v.ownerEmail.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesStatus = statusFilter === 'ALL' || v.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredDevices = devicesList.filter(d => {
+    const matchesSearch = d.deviceId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          d.vin.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          d.vehicleName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || d.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Pagination Slice
+  const getPaginatedData = (dataArray) => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return dataArray.slice(startIndex, startIndex + itemsPerPage);
+  };
+
+  const getTotalPages = (dataArray) => Math.ceil(dataArray.length / itemsPerPage) || 1;
 
   if (loading) {
     return (
@@ -102,237 +232,370 @@ export default function AdminPortal({ token, onLogout }) {
             <Shield size={26} />
           </div>
           <div className="brand-title">
-            <h1>SmartCar Szerelési & Kapcsolási Kézikönyv</h1>
-            <div className="brand-subtitle">Vizuális Kódfüggetlen Bekötési Rajzok</div>
+            <h1>SmartCar Telematics Admin Konzol</h1>
+            <div className="brand-subtitle">Részletes Ügyfél-, Jármű- és Eszközkezelés</div>
           </div>
         </div>
         <button className="btn-secondary" onClick={onLogout}>Kijelentkezés</button>
       </header>
 
+      {/* Stats KPI Overview */}
+      {stats && (
+        <div className="telemetry-grid" style={{ marginBottom: '20px' }}>
+          <div className="telemetry-card">
+            <div className="card-label"><Users size={16} /> Összes Ügyfél</div>
+            <div className="card-value" style={{ color: '#00f2fe' }}>{stats.totalUsers}</div>
+          </div>
+          <div className="telemetry-card">
+            <div className="card-label"><Car size={16} /> Regisztrált Járművek</div>
+            <div className="card-value" style={{ color: '#10b981' }}>{stats.totalVehicles}</div>
+          </div>
+          <div className="telemetry-card">
+            <div className="card-label"><Radio size={16} /> Aktív ESP32 Modulok</div>
+            <div className="card-value" style={{ color: '#f59e0b' }}>{stats.onlineDevices}</div>
+          </div>
+          <div className="telemetry-card">
+            <div className="card-label"><Zap size={16} /> MQTT Broker</div>
+            <div className="card-value" style={{ color: stats.mqttStatus === 'connected' ? '#10b981' : '#ef4444' }}>
+              {stats.mqttStatus === 'connected' ? 'OK 🟢' : 'HIBA 🔴'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', flexWrap: 'wrap' }}>
         <button 
-          className={`btn-secondary ${activeTab === 'docs' ? 'active-tab' : ''}`}
-          onClick={() => setActiveTab('docs')}
-          style={{ background: activeTab === 'docs' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'docs' ? '#00f2fe' : undefined }}
+          className={`btn-secondary ${activeTab === 'users' ? 'active-tab' : ''}`}
+          onClick={() => { setActiveTab('users'); setCurrentPage(1); setSearchQuery(''); }}
+          style={{ background: activeTab === 'users' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'users' ? '#00f2fe' : undefined }}
         >
-          <BookOpen size={18} /> Vizuális Kapcsolási Rajz
+          <Users size={18} /> 👥 Ügyfelek ({usersList.length})
+        </button>
+        <button 
+          className={`btn-secondary ${activeTab === 'vehicles' ? 'active-tab' : ''}`}
+          onClick={() => { setActiveTab('vehicles'); setCurrentPage(1); setSearchQuery(''); }}
+          style={{ background: activeTab === 'vehicles' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'vehicles' ? '#00f2fe' : undefined }}
+        >
+          <Car size={18} /> 🚗 Járművek ({vehiclesList.length})
+        </button>
+        <button 
+          className={`btn-secondary ${activeTab === 'devices' ? 'active-tab' : ''}`}
+          onClick={() => { setActiveTab('devices'); setCurrentPage(1); setSearchQuery(''); }}
+          style={{ background: activeTab === 'devices' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'devices' ? '#00f2fe' : undefined }}
+        >
+          <Cpu size={18} /> 📟 Fizikai Eszközök ({devicesList.length})
         </button>
         <button 
           className={`btn-secondary ${activeTab === 'pairing' ? 'active-tab' : ''}`}
           onClick={() => setActiveTab('pairing')}
           style={{ background: activeTab === 'pairing' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'pairing' ? '#00f2fe' : undefined }}
         >
-          <Link size={18} /> Hardver Párosítás & Aktiválás
+          <Link size={18} /> 🔗 Eszköz Párosítás
+        </button>
+        <button 
+          className={`btn-secondary ${activeTab === 'docs' ? 'active-tab' : ''}`}
+          onClick={() => setActiveTab('docs')}
+          style={{ background: activeTab === 'docs' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'docs' ? '#00f2fe' : undefined }}
+        >
+          <BookOpen size={18} /> 📖 Szerelési Útmutató
         </button>
       </div>
 
-      {/* TAB 1: VISUAL GRAPHICAL SCHEMATICS (NO ACCIDENTAL TEXT WRAPPING) */}
-      {activeTab === 'docs' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          
-          {/* VISUAL HARDWARE CONNECTION BLOCKS */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><Zap size={22} style={{ color: '#00f2fe' }} /> 1. Vizuális Modul Összekötési Blokkvázlat</div>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', margin: '16px 0' }}>
-              
-              {/* Block 1: Power Supply */}
-              <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid #ef4444', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: '700', marginBottom: '10px' }}>
-                  <Zap size={20} /> 1. Autós Tápellátás
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>+12V BATT+:</strong> Fuse Tap adapter a biztosítéktábláról
-                  <br />• <strong>GND:</strong> Karosszéria testcsavar
-                  <br />• <strong>DC-DC Konverter:</strong> 12V ➔ 5V (3A kimenet)
-                </div>
-              </div>
-
-              {/* Block 2: ESP32 MCU */}
-              <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid #00f2fe', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00f2fe', fontWeight: '700', marginBottom: '10px' }}>
-                  <Cpu size={20} /> 2. ESP32-S3 Fővezérlő
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>Táp:</strong> VIN lábra 5V (DC-DC-ből)
-                  <br />• <strong>GPIO 4, 5:</strong> CAN-C (Motor/Diag)
-                  <br />• <strong>GPIO 15,18,19,23:</strong> CAN-B (Komfort SPI)
-                  <br />• <strong>GPIO 16, 17:</strong> 4G Modem (UART)
-                </div>
-              </div>
-
-              {/* Block 3: 4G GPS Modem */}
-              <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: '700', marginBottom: '10px' }}>
-                  <Radio size={20} /> 3. 4G LTE & GPS Modem
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
-                  • <strong>Modell:</strong> A7670E / SIM7600 (Európai)
-                  <br />• <strong>Táp:</strong> 5V kimenet a DC-DC-ből
-                  <br />• <strong>Adat:</strong> MQTTS TLS 1.3 titkosítás
-                  <br />• <strong>GPS Antenna:</strong> Kerámia antenna
-                </div>
-              </div>
-
-            </div>
+      {/* FILTER & SEARCH BAR FOR TABLES */}
+      {(activeTab === 'users' || activeTab === 'vehicles' || activeTab === 'devices') && (
+        <div style={{ display: 'flex', gap: '16px', margin: '20px 0', alignItems: 'center' }}>
+          <div className="input-group" style={{ flex: 1, margin: 0 }}>
+            <Search size={18} style={{ color: '#94a3b8', marginRight: '8px' }} />
+            <input 
+              type="text" 
+              placeholder="Keresés névre, emailre, VIN-re, rendszámra vagy Eszköz ID-ra..." 
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            />
           </div>
 
-          {/* CAR SELECTOR BUTTONS */}
-          <div className="card" style={{ padding: '16px' }}>
-            <div style={{ fontSize: '0.9rem', color: '#fff', fontWeight: '700', marginBottom: '12px' }}>
-              Válaszd ki a szerelendő Autótípust a kapcsolási rajz megtekintéséhez:
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button 
-                className={`btn-secondary ${selectedCarGuide === 'renault_fluence' ? 'active-tab' : ''}`}
-                onClick={() => setSelectedCarGuide('renault_fluence')}
-                style={{ background: selectedCarGuide === 'renault_fluence' ? '#00f2fe' : undefined, color: selectedCarGuide === 'renault_fluence' ? '#000' : undefined, fontWeight: '700' }}
-              >
-                <Car size={16} /> Renault Fluence / Mégane III
-              </button>
-              <button 
-                className={`btn-secondary ${selectedCarGuide === 'mercedes_w164' ? 'active-tab' : ''}`}
-                onClick={() => setSelectedCarGuide('mercedes_w164')}
-                style={{ background: selectedCarGuide === 'mercedes_w164' ? '#00f2fe' : undefined, color: selectedCarGuide === 'mercedes_w164' ? '#000' : undefined, fontWeight: '700' }}
-              >
-                <Car size={16} /> Mercedes-Benz GL / ML (W164)
-              </button>
-              <button 
-                className={`btn-secondary ${selectedCarGuide === 'bmw_e60' ? 'active-tab' : ''}`}
-                onClick={() => setSelectedCarGuide('bmw_e60')}
-                style={{ background: selectedCarGuide === 'bmw_e60' ? '#00f2fe' : undefined, color: selectedCarGuide === 'bmw_e60' ? '#000' : undefined, fontWeight: '700' }}
-              >
-                <Car size={16} /> BMW 5 / 3 Series (E60 / E90)
-              </button>
-              <button 
-                className={`btn-secondary ${selectedCarGuide === 'vw_mqb' ? 'active-tab' : ''}`}
-                onClick={() => setSelectedCarGuide('vw_mqb')}
-                style={{ background: selectedCarGuide === 'vw_mqb' ? '#00f2fe' : undefined, color: selectedCarGuide === 'vw_mqb' ? '#000' : undefined, fontWeight: '700' }}
-              >
-                <Car size={16} /> VW / Audi / Skoda (MQB)
-              </button>
-              <button 
-                className={`btn-secondary ${selectedCarGuide === 'ford_focus3' ? 'active-tab' : ''}`}
-                onClick={() => setSelectedCarGuide('ford_focus3')}
-                style={{ background: selectedCarGuide === 'ford_focus3' ? '#00f2fe' : undefined, color: selectedCarGuide === 'ford_focus3' ? '#000' : undefined, fontWeight: '700' }}
-              >
-                <Car size={16} /> Ford Focus MK3 / Mondeo MK4
-              </button>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Filter size={18} style={{ color: '#94a3b8' }} />
+            <select 
+              value={statusFilter} 
+              onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              style={{
+                padding: '12px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '10px',
+                color: '#fff',
+                fontSize: '0.9rem'
+              }}
+            >
+              <option value="ALL" style={{ background: '#0a0e17' }}>Minden Státusz</option>
+              {activeTab === 'users' && (
+                <>
+                  <option value="ADMIN" style={{ background: '#0a0e17' }}>Adminok</option>
+                  <option value="USER" style={{ background: '#0a0e17' }}>Ügyfelek</option>
+                </>
+              )}
+              {(activeTab === 'vehicles' || activeTab === 'devices') && (
+                <>
+                  <option value="online" style={{ background: '#0a0e17' }}>✅ Aktív / Online</option>
+                  <option value="pending_activation" style={{ background: '#0a0e17' }}>⏳ Beszerelésre vár</option>
+                </>
+              )}
+            </select>
           </div>
-
-          {/* RENAULT FLUENCE PINOUT VISUAL CARDS */}
-          {selectedCarGuide === 'renault_fluence' && (
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title"><Car size={24} style={{ color: '#00f2fe' }} /> Renault Fluence & Mégane III Kábelezési Kapcsolás</div>
-                <span className="status-badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', borderColor: '#00f2fe' }}>CAN-C: 500k | CAN-Body: 250k</span>
-              </div>
-
-              {/* Pin Connections Visual Rows */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '16px 0' }}>
-                
-                {/* Connection 1: CAN-C */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#10b981', fontWeight: '700', fontSize: '0.9rem' }}>🟢 1. CAN-C Motor & Diagnosztika (500 kbps)</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                      ESP32 <strong>GPIO 5 (TX) & GPIO 4 (RX)</strong> ➔ SN65HVD230 CAN Modul
-                    </div>
-                  </div>
-                  <ArrowRight style={{ color: '#10b981', margin: '0 16px' }} />
-                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: OBD-II Csatlakozó (Kormány alatt balra)</div>
-                    <div style={{ color: '#10b981', fontSize: '0.82rem', marginTop: '2px' }}>
-                      • CAN High ➔ <strong>OBD PIN 6</strong> (Fehér kábel)
-                      <br />• CAN Low ➔ <strong>OBD PIN 14</strong> (Rózsaszín / Kék kábel)
-                    </div>
-                  </div>
-                </div>
-
-                {/* Connection 2: CAN-Body */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(127, 83, 172, 0.06)', border: '1px solid rgba(127, 83, 172, 0.3)', borderRadius: '10px', padding: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#7f53ac', fontWeight: '700', fontSize: '0.9rem' }}>🟣 2. CAN-Body Komfort Zár & Ablak (250 kbps)</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                      ESP32 <strong>GPIO 15,18,19,23 (SPI)</strong> ➔ MCP2515 CAN Modul
-                    </div>
-                  </div>
-                  <ArrowRight style={{ color: '#7f53ac', margin: '0 16px' }} />
-                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: UCH Vezérlő Modul (Biztosítéktábla mögött)</div>
-                    <div style={{ color: '#7f53ac', fontSize: '0.82rem', marginTop: '2px' }}>
-                      • CAN High ➔ UCH 40-pin <strong>PIN 12</strong> (Barna/Fehér kábel)
-                      <br />• CAN Low ➔ UCH 40-pin <strong>PIN 13</strong> (Barna/Zöld kábel)
-                    </div>
-                  </div>
-                </div>
-
-                {/* Connection 3: Power */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#ef4444', fontWeight: '700', fontSize: '0.9rem' }}>🔴 3. Tápellátás & Test</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
-                      DC-DC Buck Konverter IN+ & IN-
-                    </div>
-                  </div>
-                  <ArrowRight style={{ color: '#ef4444', margin: '0 16px' }} />
-                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: Biztosítéktábla & Testcsavar</div>
-                    <div style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '2px' }}>
-                      • +12V BATT+ ➔ 15A Cigarettagyújtó biztosíték (Fuse Tap)
-                      <br />• GND ➔ Műszerfal alatti fémváz testcsavar
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* MERCEDES W164 PINOUT VISUAL CARDS */}
-          {selectedCarGuide === 'mercedes_w164' && (
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title"><Car size={24} style={{ color: '#10b981' }} /> Mercedes-Benz GL / ML (W164) Kábelezési Kapcsolás</div>
-                <span className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderColor: '#10b981' }}>CAN-C: 500k | CAN-B: 83.3k</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '16px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#10b981', fontWeight: '700' }}>🟢 1. CAN-C Motor & Diag (500k)</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ESP32 GPIO 4, 5 ➔ SN65HVD230 Modul</div>
-                  </div>
-                  <ArrowRight style={{ color: '#10b981', margin: '0 16px' }} />
-                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px' }}>
-                    <div style={{ color: '#fff', fontSize: '0.85rem' }}>Autó: OBD-II Csatlakozó</div>
-                    <div style={{ color: '#10b981', fontSize: '0.82rem' }}>• PIN 6 (Zöld/Fehér) & PIN 14 (Zöld)</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(127, 83, 172, 0.06)', border: '1px solid rgba(127, 83, 172, 0.3)', borderRadius: '10px', padding: '14px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#7f53ac', fontWeight: '700' }}>🟣 2. CAN-B Komfort (83.3k)</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ESP32 SPI ➔ MCP2515 Modul</div>
-                  </div>
-                  <ArrowRight style={{ color: '#7f53ac', margin: '0 16px' }} />
-                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px' }}>
-                    <div style={{ color: '#fff', fontSize: '0.85rem' }}>Autó: REAR SAM Modul (Csomagtér jobb oldal)</div>
-                    <div style={{ color: '#7f53ac', fontSize: '0.82rem' }}>• CAN High ➔ Barna / Piros érpár<br />• CAN Low ➔ Barna érpár</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
         </div>
       )}
 
-      {/* TAB 2: DEVICE PAIRING & VEHICLES */}
+      {/* TAB 1: USERS MANAGEMENT TABLE */}
+      {activeTab === 'users' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><Users size={22} style={{ color: '#00f2fe' }} /> Regisztrált Ügyfelek Adatbázisa</div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>ID</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Név</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Email</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Szerepkör</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Járművei</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Műveletek</th>
+              </tr>
+            </thead>
+            <tbody>
+              {getPaginatedData(filteredUsers).map(u => (
+                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '12px', color: '#94a3b8', fontSize: '0.8rem' }}>{u.id}</td>
+                  <td style={{ padding: '12px', fontWeight: '600', color: '#fff' }}>{u.name}</td>
+                  <td style={{ padding: '12px', color: '#00f2fe' }}>{u.email}</td>
+                  <td style={{ padding: '12px' }}>
+                    <span className="status-badge" style={{ background: u.role === 'admin' ? 'rgba(127,83,172,0.2)' : 'rgba(16,185,129,0.2)', color: u.role === 'admin' ? '#7f53ac' : '#10b981' }}>
+                      {u.role.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px' }}>{u.vehicleCount || 0} autó</td>
+                  <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
+                    <button className="btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setSelectedUserModal({ ...u })}>
+                      <Edit3 size={14} /> Módosítás
+                    </button>
+                    <button className="btn-secondary" style={{ padding: '6px 10px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDeleteUser(u.id)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination Controls */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.85rem' }}>
+            <div>Összesen {filteredUsers.length} ügyfél (Oldal: {currentPage} / {getTotalPages(filteredUsers)})</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                <ChevronLeft size={16} /> Előző
+              </button>
+              <button className="btn-secondary" disabled={currentPage >= getTotalPages(filteredUsers)} onClick={() => setCurrentPage(prev => prev + 1)}>
+                Következő <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: VEHICLES MANAGEMENT TABLE */}
+      {activeTab === 'vehicles' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><Car size={22} style={{ color: '#10b981' }} /> Flotta Járművek Részletes Listája</div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Jármű Név / Rendszám</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>VIN Alvázszám</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Tulajdonos</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Fizikai Eszköz ID</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Státusz</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Műveletek</th>
+              </tr>
+            </thead>
+            <tbody>
+              {getPaginatedData(filteredVehicles).map(v => (
+                <tr key={v.vin} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '12px', fontWeight: '600', color: '#fff' }}>
+                    {v.name} <span style={{ color: '#00f2fe' }}>({v.plate})</span>
+                  </td>
+                  <td style={{ padding: '12px', fontFamily: 'JetBrains Mono', fontSize: '0.8rem', color: '#94a3b8' }}>{v.vin}</td>
+                  <td style={{ padding: '12px', color: '#94a3b8' }}>{v.ownerEmail || 'Nincs hozzárendelve'}</td>
+                  <td style={{ padding: '12px', color: '#f59e0b', fontSize: '0.8rem' }}>{v.deviceId}</td>
+                  <td style={{ padding: '12px' }}>
+                    <span className="status-badge" style={{ background: v.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)', color: v.status === 'online' ? '#10b981' : '#f59e0b' }}>
+                      {v.status === 'online' ? '✅ Online' : '⏳ Várakozik'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
+                    <button className="btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setSelectedVehicleModal({ ...v })}>
+                      <Eye size={14} /> Részletek / Módosítás
+                    </button>
+                    <button className="btn-secondary" style={{ padding: '6px 10px', color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleDeleteVehicle(v.vin)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination Controls */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.85rem' }}>
+            <div>Összesen {filteredVehicles.length} jármű (Oldal: {currentPage} / {getTotalPages(filteredVehicles)})</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                <ChevronLeft size={16} /> Előző
+              </button>
+              <button className="btn-secondary" disabled={currentPage >= getTotalPages(filteredVehicles)} onClick={() => setCurrentPage(prev => prev + 1)}>
+                Következő <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: DEVICES MANAGEMENT TABLE */}
+      {activeTab === 'devices' && (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title"><Cpu size={22} style={{ color: '#f59e0b' }} /> Telepített ESP32 Hardver Eszközök</div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', margin: '12px 0' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: '#fff' }}>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Fizikai Eszköz ID / IMEI</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Hozzárendelt Jármű</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>CAN Profil</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Utolsó Kommunikáció</th>
+                <th style={{ padding: '12px', borderBottom: '1px solid var(--border-color)' }}>Státusz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {getPaginatedData(filteredDevices).map(d => (
+                <tr key={d.deviceId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '12px', fontWeight: '700', color: '#f59e0b', fontFamily: 'JetBrains Mono' }}>{d.deviceId}</td>
+                  <td style={{ padding: '12px', color: '#fff' }}>{d.vehicleName} ({d.plate})</td>
+                  <td style={{ padding: '12px', color: '#00f2fe' }}>{d.canProfileName || 'Alapértelmezett'}</td>
+                  <td style={{ padding: '12px', color: '#94a3b8', fontSize: '0.8rem' }}>{new Date(d.lastPing).toLocaleString('hu-HU')}</td>
+                  <td style={{ padding: '12px' }}>
+                    <span className="status-badge" style={{ background: d.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)', color: d.status === 'online' ? '#10b981' : '#f59e0b' }}>
+                      {d.status === 'online' ? '✅ Aktív MQTTS' : '⏳ Párosításra vár'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {selectedUserModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '450px', background: '#0a0e17', border: '1px solid #00f2fe' }}>
+            <div className="card-header">
+              <div className="card-title"><Edit3 size={20} /> Ügyfél Adatainak Módosítása</div>
+              <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setSelectedUserModal(null)}><X size={16} /></button>
+            </div>
+
+            {editFormMsg && (
+              <div style={{ padding: '10px', borderRadius: '8px', background: editFormMsg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: '#fff', margin: '10px 0' }}>
+                {editFormMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveUser} className="auth-form">
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Ügyfél Neve:</label>
+                <input type="text" value={selectedUserModal.name} onChange={e => setSelectedUserModal({ ...selectedUserModal, name: e.target.value })} required />
+              </div>
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Email Cím:</label>
+                <input type="email" value={selectedUserModal.email} onChange={e => setSelectedUserModal({ ...selectedUserModal, email: e.target.value })} required />
+              </div>
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Szerepkör:</label>
+                <select 
+                  value={selectedUserModal.role} 
+                  onChange={e => setSelectedUserModal({ ...selectedUserModal, role: e.target.value })}
+                  style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', borderRadius: '10px', color: '#fff' }}
+                >
+                  <option value="user" style={{ background: '#0a0e17' }}>Ügyfél (User)</option>
+                  <option value="admin" style={{ background: '#0a0e17' }}>Adminisztrátor (Admin)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" className="btn-primary full-width">Mentés</button>
+                <button type="button" className="btn-secondary full-width" onClick={() => setSelectedUserModal(null)}>Mégse</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT VEHICLE MODAL */}
+      {selectedVehicleModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '500px', background: '#0a0e17', border: '1px solid #10b981' }}>
+            <div className="card-header">
+              <div className="card-title"><Car size={20} /> Jármű Részletei & Módosítása</div>
+              <button className="btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setSelectedVehicleModal(null)}><X size={16} /></button>
+            </div>
+
+            {editFormMsg && (
+              <div style={{ padding: '10px', borderRadius: '8px', background: editFormMsg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: '#fff', margin: '10px 0' }}>
+                {editFormMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveVehicle} className="auth-form">
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Jármű Neve:</label>
+                <input type="text" value={selectedVehicleModal.name} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, name: e.target.value })} required />
+              </div>
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Rendszám:</label>
+                <input type="text" value={selectedVehicleModal.plate} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, plate: e.target.value })} required />
+              </div>
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Fizikai ESP32 Eszköz ID:</label>
+                <input type="text" value={selectedVehicleModal.deviceId} onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, deviceId: e.target.value })} required />
+              </div>
+              <div className="input-group">
+                <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Aktiválási Státusz:</label>
+                <select 
+                  value={selectedVehicleModal.status} 
+                  onChange={e => setSelectedVehicleModal({ ...selectedVehicleModal, status: e.target.value })}
+                  style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', borderRadius: '10px', color: '#fff' }}
+                >
+                  <option value="online" style={{ background: '#0a0e17' }}>✅ Online (Aktiválva)</option>
+                  <option value="pending_activation" style={{ background: '#0a0e17' }}>⏳ Beszerelésre vár</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" className="btn-primary full-width">Változtatások Mentése</button>
+                <button type="button" className="btn-secondary full-width" onClick={() => setSelectedVehicleModal(null)}>Bezárás</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: DEVICE PAIRING */}
       {activeTab === 'pairing' && (
         <div className="dashboard-grid">
           <div className="card">
@@ -380,8 +643,8 @@ export default function AdminPortal({ token, onLogout }) {
                 <input 
                   type="text" 
                   placeholder="Fizikai ESP32 Eszköz ID / IMEI (pl. 864920051234567)" 
-                  value={deviceId} 
-                  onChange={e => setDeviceId(e.target.value)} 
+                  value={deviceIdInput} 
+                  onChange={e => setDeviceIdInput(e.target.value)} 
                   required 
                 />
               </div>
@@ -413,36 +676,52 @@ export default function AdminPortal({ token, onLogout }) {
               </button>
             </form>
           </div>
+        </div>
+      )}
 
+      {/* TAB 5: WIRING HANDBOOK */}
+      {activeTab === 'docs' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="card">
             <div className="card-header">
-              <div className="card-title"><Cpu size={22} /> Járművek & Párosított Eszközök</div>
+              <div className="card-title"><Zap size={22} style={{ color: '#00f2fe' }} /> Vizuális Modul Összekötési Blokkvázlat</div>
             </div>
-
-            <div className="dtc-list">
-              {vehiclesList.map((v) => (
-                <div className="dtc-item" key={v.vin}>
-                  <div>
-                    <div style={{ fontWeight: '600', color: '#fff' }}>{v.name} ({v.plate})</div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>VIN: {v.vin}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#00f2fe', marginTop: '2px' }}>
-                      Eszköz ID: {v.deviceId} | Tulaj: {v.ownerEmail}
-                    </div>
-                  </div>
-                  <span 
-                    className="status-badge" 
-                    style={{ 
-                      fontSize: '0.75rem', 
-                      padding: '4px 10px',
-                      background: v.status === 'online' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                      color: v.status === 'online' ? '#10b981' : '#f59e0b',
-                      borderColor: v.status === 'online' ? '#10b981' : '#f59e0b'
-                    }}
-                  >
-                    {v.status === 'online' ? '✅ Aktív / Online' : '⏳ Beszerelésre vár'}
-                  </span>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', margin: '16px 0' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid #ef4444', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: '700', marginBottom: '10px' }}>
+                  <Zap size={20} /> 1. Autós Tápellátás
                 </div>
-              ))}
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>+12V BATT+:</strong> Fuse Tap adapter a biztosítéktábláról
+                  <br />• <strong>GND:</strong> Karosszéria testcsavar
+                  <br />• <strong>DC-DC Konverter:</strong> 12V ➔ 5V (3A kimenet)
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid #00f2fe', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00f2fe', fontWeight: '700', marginBottom: '10px' }}>
+                  <Cpu size={20} /> 2. ESP32-S3 Fővezérlő
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>Táp:</strong> VIN lábra 5V (DC-DC-ből)
+                  <br />• <strong>GPIO 4, 5:</strong> CAN-C (Motor/Diag)
+                  <br />• <strong>GPIO 15,18,19,23:</strong> CAN-B (Komfort SPI)
+                  <br />• <strong>GPIO 16, 17:</strong> 4G Modem (UART)
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: '700', marginBottom: '10px' }}>
+                  <Radio size={20} /> 3. 4G LTE & GPS Modem
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>Modell:</strong> A7670E / SIM7600 (Európai)
+                  <br />• <strong>Táp:</strong> 5V kimenet a DC-DC-ből
+                  <br />• <strong>Adat:</strong> MQTTS TLS 1.3 titkosítás
+                  <br />• <strong>GPS Antenna:</strong> Kerámia antenna
+                </div>
+              </div>
             </div>
           </div>
         </div>

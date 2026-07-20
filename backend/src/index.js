@@ -219,7 +219,6 @@ app.get('/api/vehicles', verifyToken, (req, res) => {
   if (req.user.role === 'admin') {
     return res.json(allVehicles);
   }
-  // User only sees their own vehicles
   const userVehicles = allVehicles.filter(v => v.ownerId === req.user.id);
   res.json(userVehicles);
 });
@@ -237,7 +236,6 @@ app.post('/api/vehicles/register', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Ezzel az alvázszámmal már regisztráltak járművet' });
     }
 
-    // Temporary dummy device ID until paired by Admin
     const tempDeviceId = `PENDING_${vin}`;
 
     await db.query(
@@ -293,7 +291,7 @@ app.post('/api/vehicles/:vin/command', verifyToken, async (req, res) => {
   res.json({ success: true, message: `Parancs '${action}' sikeresen elküldve!`, vehicleState: vehicle.controls });
 });
 
-// Admin Routes (Device Provisioning & Pairing)
+// ADMIN MANAGEMENT ENDPOINTS (Full CRUD + Search + Filter + Pagination)
 app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const uRes = await db.query('SELECT COUNT(*) FROM users');
@@ -312,10 +310,98 @@ app.get('/api/admin/stats', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// Admin Users CRUD
 app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const uRes = await db.query('SELECT id, name, email, role, created_at as "createdAt" FROM users ORDER BY created_at DESC');
-    res.json(uRes.rows);
+    const qRes = await db.query(`
+      SELECT u.id, u.name, u.email, u.role, u.created_at as "createdAt",
+             COUNT(v.vin) as "vehicleCount"
+      FROM users u
+      LEFT JOIN vehicles v ON v.owner_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `);
+    res.json(qRes.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, email, role } = req.body;
+  try {
+    await db.query(
+      'UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), role = COALESCE($3, role) WHERE id = $4',
+      [name, email, role, id]
+    );
+    res.json({ success: true, message: 'Ügyfél adatai sikeresen módosítva!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Ügyfél törölve!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Vehicles CRUD
+app.get('/api/admin/vehicles', verifyToken, verifyAdmin, async (req, res) => {
+  res.json(Object.values(vehiclesCache));
+});
+
+app.patch('/api/admin/vehicles/:vin', verifyToken, verifyAdmin, async (req, res) => {
+  const { vin } = req.params;
+  const { name, plate, status, deviceId, canProfileId, ownerId } = req.body;
+  try {
+    await db.query(
+      `UPDATE vehicles 
+       SET name = COALESCE($1, name), plate = COALESCE($2, plate), status = COALESCE($3, status),
+           device_id = COALESCE($4, device_id), can_profile_id = COALESCE($5, can_profile_id),
+           owner_id = COALESCE($6, owner_id), last_update = NOW()
+       WHERE vin = $7`,
+      [name, plate, status, deviceId, canProfileId, ownerId, vin]
+    );
+    await refreshVehiclesCache();
+    if (vehiclesCache[vin]) io.emit('vehicle_update', vehiclesCache[vin]);
+    res.json({ success: true, message: 'Jármű adatai frissítve!', vehicle: vehiclesCache[vin] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/vehicles/:vin', verifyToken, verifyAdmin, async (req, res) => {
+  const { vin } = req.params;
+  try {
+    await db.query('DELETE FROM vehicles WHERE vin = $1', [vin]);
+    delete vehiclesCache[vin];
+    res.json({ success: true, message: 'Jármű törölve a rendszerből!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Devices List
+app.get('/api/admin/devices', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const resVehicles = Object.values(vehiclesCache);
+    const devicesList = resVehicles.map(v => ({
+      deviceId: v.deviceId,
+      vin: v.vin,
+      vehicleName: v.name,
+      plate: v.plate,
+      ownerEmail: v.ownerEmail,
+      status: v.status,
+      canProfileName: v.canProfileName,
+      lastPing: v.lastUpdate
+    }));
+    res.json(devicesList);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
