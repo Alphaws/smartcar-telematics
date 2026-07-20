@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Cpu, Users, Radio, PlusCircle, BookOpen, Wrench, FileCode, Zap, 
-  CheckCircle, AlertTriangle, RefreshCw, Copy, Check, Link, Car, Info, MapPin
+  CheckCircle, AlertTriangle, RefreshCw, Copy, Check, Link, Car, Info, MapPin, ArrowRight
 } from 'lucide-react';
 
 export default function AdminPortal({ token, onLogout }) {
@@ -50,9 +50,7 @@ export default function AdminPortal({ token, onLogout }) {
       if (vehiclesData.length > 0) setSelectedVin(vehiclesData[0].vin);
     } catch (err) {
       console.error('Admin data fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
+    } finale();
   };
 
   const handlePairDevice = async (e) => {
@@ -102,8 +100,8 @@ export default function AdminPortal({ token, onLogout }) {
             <Shield size={26} />
           </div>
           <div className="brand-title">
-            <h1>SmartCar Telematics Master Handbook</h1>
-            <div className="brand-subtitle">Hardver Összekötési Rajz & Autó Kábel Helyszín Leírások</div>
+            <h1>SmartCar Szerelési & Kapcsolási Kézikönyv</h1>
+            <div className="brand-subtitle">Vizuális Kódfüggetlen Bekötési Rajzok</div>
           </div>
         </div>
         <button className="btn-secondary" onClick={onLogout}>Kijelentkezés</button>
@@ -116,7 +114,7 @@ export default function AdminPortal({ token, onLogout }) {
           onClick={() => setActiveTab('docs')}
           style={{ background: activeTab === 'docs' ? 'rgba(0, 242, 254, 0.2)' : undefined, borderColor: activeTab === 'docs' ? '#00f2fe' : undefined }}
         >
-          <BookOpen size={18} /> Részletes Összekötési & Kábel Útmutató
+          <BookOpen size={18} /> Vizuális Kapcsolási Rajz
         </button>
         <button 
           className={`btn-secondary ${activeTab === 'pairing' ? 'active-tab' : ''}`}
@@ -127,57 +125,65 @@ export default function AdminPortal({ token, onLogout }) {
         </button>
       </div>
 
-      {/* TAB 1: HARDWARE INTERCONNECTION & CAR WIRING LOCATIONS */}
+      {/* TAB 1: VISUAL GRAPHICAL SCHEMATICS (NO ACCIDENTAL TEXT WRAPPING) */}
       {activeTab === 'docs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
-          {/* SECTION A: MASTER HARDWARE INTERCONNECTION SCHEMATIC */}
+          {/* VISUAL HARDWARE CONNECTION BLOCKS */}
           <div className="card">
             <div className="card-header">
-              <div className="card-title"><Zap size={22} style={{ color: '#00f2fe' }} /> 1. Az Alkatrészek Teljes Hardveres Összekötési Rajza</div>
+              <div className="card-title"><Zap size={22} style={{ color: '#00f2fe' }} /> 1. Vizuális Modul Összekötési Blokkvázlat</div>
             </div>
             
-            <p style={{ fontSize: '0.88rem', color: '#94a3b8', lineHeight: '1.5' }}>
-              Ez a rajz mutatja meg, hogyan kell a különálló paneleket (ESP32-S3, SN65HVD230 CAN modul, MCP2515 CAN modul, A7670E 4G/GPS modem, DC-DC Buck táp) összekötni egymással a NYÁK-on vagy a próbapanelen:
-            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', margin: '16px 0' }}>
+              
+              {/* Block 1: Power Supply */}
+              <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid #ef4444', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: '700', marginBottom: '10px' }}>
+                  <Zap size={20} /> 1. Autós Tápellátás
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>+12V BATT+:</strong> Fuse Tap adapter a biztosítéktábláról
+                  <br />• <strong>GND:</strong> Karosszéria testcsavar
+                  <br />• <strong>DC-DC Konverter:</strong> 12V ➔ 5V (3A kimenet)
+                </div>
+              </div>
 
-            <div style={{ background: '#060a12', padding: '16px', borderRadius: '12px', fontFamily: 'JetBrains Mono', fontSize: '0.8rem', color: '#00f2fe', lineHeight: '1.4', overflowX: 'auto', border: '1px solid var(--border-color)', margin: '12px 0' }}>
-{`┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                ESP32 DUAL-CAN & 4G TELEMATIKA HARDVER RAJZ                              │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+              {/* Block 2: ESP32 MCU */}
+              <div style={{ background: 'rgba(0, 242, 254, 0.08)', border: '1px solid #00f2fe', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00f2fe', fontWeight: '700', marginBottom: '10px' }}>
+                  <Cpu size={20} /> 2. ESP32-S3 Fővezérlő
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>Táp:</strong> VIN lábra 5V (DC-DC-ből)
+                  <br />• <strong>GPIO 4, 5:</strong> CAN-C (Motor/Diag)
+                  <br />• <strong>GPIO 15,18,19,23:</strong> CAN-B (Komfort SPI)
+                  <br />• <strong>GPIO 16, 17:</strong> 4G Modem (UART)
+                </div>
+              </div>
 
-  [ 12V AUTÓS TÁP (Fuse Tap) ] ────> [ MP1584EN Buck Konverter ] ────> OUT+ (+5V)  ───> [ ESP32 VIN & MCP2515 VCC ]
-  [ KAROSSZÉRIA TEST (GND) ] ─────> OUT- (GND) ───> [ ESP32 GND & ÖSSZES MODUL GND ]
+              {/* Block 3: 4G GPS Modem */}
+              <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid #f59e0b', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: '700', marginBottom: '10px' }}>
+                  <Radio size={20} /> 3. 4G LTE & GPS Modem
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#fff', lineHeight: '1.6' }}>
+                  • <strong>Modell:</strong> A7670E / SIM7600 (Európai)
+                  <br />• <strong>Táp:</strong> 5V kimenet a DC-DC-ből
+                  <br />• <strong>Adat:</strong> MQTTS TLS 1.3 titkosítás
+                  <br />• <strong>GPS Antenna:</strong> Kerámia antenna
+                </div>
+              </div>
 
-  ┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │                                       ESP32-S3 MIKROKONTROLLER                                        │
-  │                                                                                                       │
-  │   GPIO 5 (TWAI TX) ─────────────────────────> SN65HVD230 (CAN-C)  TX Pin                              │
-  │   GPIO 4 (TWAI RX) ─────────────────────────> SN65HVD230 (CAN-C)  RX Pin                              │
-  │   3.3V OUT ─────────────────────────────────> SN65HVD230 (CAN-C)  VCC Pin                             │
-  │                                                                                                       │
-  │   GPIO 15 (SPI CS) ─────────────────────────> MCP2515    (CAN-B)  CS Pin                              │
-  │   GPIO 18 (SPI SCK) ────────────────────────> MCP2515    (CAN-B)  SCK Pin                             │
-  │   GPIO 23 (SPI MOSI) ───────────────────────> MCP2515    (CAN-B)  SI Pin                              │
-  │   GPIO 19 (SPI MISO) ───────────────────────> MCP2515    (CAN-B)  SO Pin                              │
-  │                                                                                                       │
-  │   GPIO 17 (UART TX) ────────────────────────> A7670E 4G Modem     RX Pin                              │
-  │   GPIO 16 (UART RX) ────────────────────────> A7670E 4G Modem     TX Pin                              │
-  └───────────────────────────────────────────────────────────────────────────────────────────────────────┘
-          │                                           │                                   │
-          │ (CANH / CANL)                             │ (CANH / CANL)                     │ (4G / GPS MQTTS)
-          ▼                                           ▼                                   ▼
- [ Autó CAN-C Motor/Diag ]                   [ Autó CAN-B Komfort UCH/SAM ]      [ Telekom/Yettel/Voda 4G ]`}
             </div>
           </div>
 
-          {/* SECTION B: CAR MODEL SELECTOR FOR EXACT WIRE LOCATIONS */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><MapPin size={22} style={{ color: '#10b981' }} /> 2. Hol vannak a Kábelek az Utastérben? (Autótípus Választó)</div>
+          {/* CAR SELECTOR BUTTONS */}
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontSize: '0.9rem', color: '#fff', fontWeight: '700', marginBottom: '12px' }}>
+              Válaszd ki a szerelendő Autótípust a kapcsolási rajz megtekintéséhez:
             </div>
-
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button 
                 className={`btn-secondary ${selectedCarGuide === 'renault_fluence' ? 'active-tab' : ''}`}
                 onClick={() => setSelectedCarGuide('renault_fluence')}
@@ -190,7 +196,7 @@ export default function AdminPortal({ token, onLogout }) {
                 onClick={() => setSelectedCarGuide('mercedes_w164')}
                 style={{ background: selectedCarGuide === 'mercedes_w164' ? '#00f2fe' : undefined, color: selectedCarGuide === 'mercedes_w164' ? '#000' : undefined, fontWeight: '700' }}
               >
-                <Car size={16} /> Mercedes GL / ML (W164)
+                <Car size={16} /> Mercedes-Benz GL / ML (W164)
               </button>
               <button 
                 className={`btn-secondary ${selectedCarGuide === 'bmw_e60' ? 'active-tab' : ''}`}
@@ -214,181 +220,112 @@ export default function AdminPortal({ token, onLogout }) {
                 <Car size={16} /> Ford Focus MK3 / Mondeo MK4
               </button>
             </div>
-
-            {/* RENAULT FLUENCE EXACT WIRE LOCATION DETAILS */}
-            {selectedCarGuide === 'renault_fluence' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(0,242,254,0.05)', borderRadius: '10px', border: '1px solid rgba(0,242,254,0.2)' }}>
-                  <h4 style={{ color: '#00f2fe', marginBottom: '8px' }}>🚗 Renault Fluence & Mégane III (2009–2016) Kábel Helyszínek:</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '12px' }}>
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#ef4444' }}>1. +12V Állandó Táp</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A műszerfal bal alján lévő utastéri biztosítéktáblán.
-                        <br /><strong>Melyik biztosíték?</strong> A felső sorban a 15A-es Cigarettagyújtó / Rádió biztosíték helye (Fuse Tap adapterrel).
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#10b981' }}>2. Motor & Diag CAN-C (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A kormány alatt balra lévő kis kipattintható tárolórekesz mögötti fekete OBD-II csatlakozóban.
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 6 (Fehér - CAN-H)</strong> és <strong>PIN 14 (Rózsaszín/Kék - CAN-L)</strong>.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#7f53ac' }}>3. Komfort CAN-Body (250k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> Az utastéri biztosítéktábla mögött elhelyezkedő fekete <strong>UCH (Unité Centrale Habitacle) vezérlőegységben</strong>.
-                        <br /><strong>Vezetékek:</strong> A 40-pin csatlakozóban a <strong>Barna/Fehér (CAN-H)</strong> és <strong>Barna/Zöld (CAN-L)</strong> sodort érpár.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MERCEDES W164 EXACT WIRE LOCATION DETAILS */}
-            {selectedCarGuide === 'mercedes_w164' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(16,185,129,0.05)', borderRadius: '10px', border: '1px solid rgba(16,185,129,0.2)' }}>
-                  <h4 style={{ color: '#10b981', marginBottom: '8px' }}>🚗 Mercedes-Benz GL / ML (W164 / X164) Kábel Helyszínek:</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '12px' }}>
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#ef4444' }}>1. +12V Állandó Táp</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A csomagtartó jobb oldali kárpitja mögött lévő REAR SAM biztosítéktáblán.
-                        <br /><strong>Melyik biztosíték?</strong> Bármelyik szabad 15A-es tartalék biztosítékhely (Fuse Tap adapterrel).
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#10b981' }}>2. Motor & Diag CAN-C (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A vezetőoldali műszerfal alsó részén lévő OBD csatlakozóban.
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 6 (Zöld/Fehér - CAN-H)</strong> és <strong>PIN 14 (Zöld - CAN-L)</strong>.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#7f53ac' }}>3. Komfort CAN-B (83.3k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A csomagtartó jobb oldalán lévő <strong>REAR SAM kényelmi modul</strong> barna csatlakozójában.
-                        <br /><strong>Vezetékek:</strong> <strong>Barna/Piros (CAN-H)</strong> és <strong>Barna (CAN-L)</strong> sodort érpár.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* BMW E60 EXACT WIRE LOCATION DETAILS */}
-            {selectedCarGuide === 'bmw_e60' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(245,158,11,0.05)', borderRadius: '10px', border: '1px solid rgba(245,158,11,0.2)' }}>
-                  <h4 style={{ color: '#f59e0b', marginBottom: '8px' }}>🚗 BMW 5 Series / 3 Series (E60 / E90) Kábel Helyszínek:</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '12px' }}>
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#ef4444' }}>1. +12V Állandó Táp</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A kesztyűtartó mögötti belső biztosítéktáblán.
-                        <br /><strong>Melyik biztosíték?</strong> 15A-es szivargyújtó / belső világítás biztosítéka (Fuse Tap adapterrel).
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#10b981' }}>2. PT-CAN Motor (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A vezetőoldali lábtér feletti OBD-II aljzatban.
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 6 (Kék/Piros - CAN-H)</strong> és <strong>PIN 14 (Kék/Barna - CAN-L)</strong>.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#7f53ac' }}>3. K-CAN Komfort (100k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A kesztyűtartó leengedése után a <strong>JBE (Junction Box) modul</strong> fekete csatlakozójában.
-                        <br /><strong>Vezetékek:</strong> <strong>Sárga/Piros (K-CAN High)</strong> és <strong>Sárga/Barna (K-CAN Low)</strong> érpár.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* VW MQB EXACT WIRE LOCATION DETAILS */}
-            {selectedCarGuide === 'vw_mqb' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(127,83,172,0.05)', borderRadius: '10px', border: '1px solid rgba(127,83,172,0.2)' }}>
-                  <h4 style={{ color: '#7f53ac', marginBottom: '8px' }}>🚗 VW / Audi / Skoda / Seat (MQB Platform) Kábel Helyszínek:</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '12px' }}>
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#ef4444' }}>1. +12V Állandó Táp</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A műszerfal bal oldalán lévő ajtó felőli biztosítéktáblán.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#10b981' }}>2. Drive CAN (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A vezetőoldali lábtéri OBD csatlakozóban.
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 6 (Narancs/Fekete - CAN-H)</strong> és <strong>PIN 14 (Narancs/Barna - CAN-L)</strong>.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#7f53ac' }}>3. Comfort CAN (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> A kormányoszlop feletti <strong>J533 Data Gateway modulban</strong>.
-                        <br /><strong>Vezetékek:</strong> <strong>Narancs/Zöld (CAN-H)</strong> és <strong>Narancs/Barna (CAN-L)</strong> érpár.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* FORD FOCUS MK3 EXACT WIRE LOCATION DETAILS */}
-            {selectedCarGuide === 'ford_focus3' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(239,68,68,0.05)', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  <h4 style={{ color: '#ef4444', marginBottom: '8px' }}>🚗 Ford Focus MK3 / Mondeo MK4 Kábel Helyszínek:</h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '12px' }}>
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#ef4444' }}>1. +12V Állandó Táp</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> Kesztyűtartó alatti BCM (Body Control Module) biztosítéktáblán.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#10b981' }}>2. HS-CAN Motor (500k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> OBD-II csatlakozóban.
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 6 (Fehér/Kék - CAN-H)</strong> és <strong>PIN 14 (Fehér - CAN-L)</strong>.
-                      </p>
-                    </div>
-
-                    <div style={{ background: '#060a12', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <strong style={{ color: '#7f53ac' }}>3. MS-CAN Komfort (125k)</strong>
-                      <p style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', lineHeight: '1.4' }}>
-                        <strong>Hol van?</strong> Szintén az OBD-II csatlakozóban ki van vezetve!
-                        <br /><strong>Vezetékek:</strong> <strong>PIN 3 (Szürke/Narancs - CAN-H)</strong> és <strong>PIN 11 (Ibolya/Narancs - CAN-L)</strong>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
           </div>
+
+          {/* RENAULT FLUENCE PINOUT VISUAL CARDS */}
+          {selectedCarGuide === 'renault_fluence' && (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title"><Car size={24} style={{ color: '#00f2fe' }} /> Renault Fluence & Mégane III Kábelezési Kapcsolás</div>
+                <span className="status-badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', borderColor: '#00f2fe' }}>CAN-C: 500k | CAN-Body: 250k</span>
+              </div>
+
+              {/* Pin Connections Visual Rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '16px 0' }}>
+                
+                {/* Connection 1: CAN-C */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#10b981', fontWeight: '700', fontSize: '0.9rem' }}>🟢 1. CAN-C Motor & Diagnosztika (500 kbps)</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
+                      ESP32 <strong>GPIO 5 (TX) & GPIO 4 (RX)</strong> ➔ SN65HVD230 CAN Modul
+                    </div>
+                  </div>
+                  <ArrowRight style={{ color: '#10b981', margin: '0 16px' }} />
+                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: OBD-II Csatlakozó (Kormány alatt balra)</div>
+                    <div style={{ color: '#10b981', fontSize: '0.82rem', marginTop: '2px' }}>
+                      • CAN High ➔ <strong>OBD PIN 6</strong> (Fehér kábel)
+                      <br />• CAN Low ➔ <strong>OBD PIN 14</strong> (Rózsaszín / Kék kábel)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connection 2: CAN-Body */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(127, 83, 172, 0.06)', border: '1px solid rgba(127, 83, 172, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#7f53ac', fontWeight: '700', fontSize: '0.9rem' }}>🟣 2. CAN-Body Komfort Zár & Ablak (250 kbps)</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
+                      ESP32 <strong>GPIO 15,18,19,23 (SPI)</strong> ➔ MCP2515 CAN Modul
+                    </div>
+                  </div>
+                  <ArrowRight style={{ color: '#7f53ac', margin: '0 16px' }} />
+                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: UCH Vezérlő Modul (Biztosítéktábla mögött)</div>
+                    <div style={{ color: '#7f53ac', fontSize: '0.82rem', marginTop: '2px' }}>
+                      • CAN High ➔ UCH 40-pin <strong>PIN 12</strong> (Barna/Fehér kábel)
+                      <br />• CAN Low ➔ UCH 40-pin <strong>PIN 13</strong> (Barna/Zöld kábel)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connection 3: Power */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#ef4444', fontWeight: '700', fontSize: '0.9rem' }}>🔴 3. Tápellátás & Test</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>
+                      DC-DC Buck Konverter IN+ & IN-
+                    </div>
+                  </div>
+                  <ArrowRight style={{ color: '#ef4444', margin: '0 16px' }} />
+                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '0.85rem' }}>Autó: Biztosítéktábla & Testcsavar</div>
+                    <div style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '2px' }}>
+                      • +12V BATT+ ➔ 15A Cigarettagyújtó biztosíték (Fuse Tap)
+                      <br />• GND ➔ Műszerfal alatti fémváz testcsavar
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* MERCEDES W164 PINOUT VISUAL CARDS */}
+          {selectedCarGuide === 'mercedes_w164' && (
+            <div className="card">
+              <div className="card-header">
+                <div className="card-title"><Car size={24} style={{ color: '#10b981' }} /> Mercedes-Benz GL / ML (W164) Kábelezési Kapcsolás</div>
+                <span className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderColor: '#10b981' }}>CAN-C: 500k | CAN-B: 83.3k</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '16px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#10b981', fontWeight: '700' }}>🟢 1. CAN-C Motor & Diag (500k)</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ESP32 GPIO 4, 5 ➔ SN65HVD230 Modul</div>
+                  </div>
+                  <ArrowRight style={{ color: '#10b981', margin: '0 16px' }} />
+                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px' }}>
+                    <div style={{ color: '#fff', fontSize: '0.85rem' }}>Autó: OBD-II Csatlakozó</div>
+                    <div style={{ color: '#10b981', fontSize: '0.82rem' }}>• PIN 6 (Zöld/Fehér) & PIN 14 (Zöld)</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', background: 'rgba(127, 83, 172, 0.06)', border: '1px solid rgba(127, 83, 172, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#7f53ac', fontWeight: '700' }}>🟣 2. CAN-B Komfort (83.3k)</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ESP32 SPI ➔ MCP2515 Modul</div>
+                  </div>
+                  <ArrowRight style={{ color: '#7f53ac', margin: '0 16px' }} />
+                  <div style={{ flex: 1, background: '#060a12', padding: '10px 14px', borderRadius: '8px' }}>
+                    <div style={{ color: '#fff', fontSize: '0.85rem' }}>Autó: REAR SAM Modul (Csomagtér jobb oldal)</div>
+                    <div style={{ color: '#7f53ac', fontSize: '0.82rem' }}>• CAN High ➔ Barna / Piros érpár<br />• CAN Low ➔ Barna érpár</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       )}
