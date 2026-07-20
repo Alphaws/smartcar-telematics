@@ -67,28 +67,29 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed CAN Profiles
+-- Seed CAN Profiles for ALL Supported Models
 INSERT INTO can_profiles (id, name, can_b_speed, can_c_speed, status)
 VALUES 
+    ('renault_fluence', 'Renault Fluence / Mégane III (2009–2016)', '250kbps', '500kbps', 'verified'),
     ('mb_w164', 'Mercedes-Benz GL / ML (W164 / X164)', '83.3kbps', '500kbps', 'verified'),
     ('bmw_e60', 'BMW 5 Series / 3 Series (E60 / E90 K-CAN)', '100kbps', '500kbps', 'verified'),
     ('vw_mqb', 'Volkswagen / Audi / Skoda (MQB Platform)', '500kbps', '500kbps', 'verified'),
     ('ford_focus3', 'Ford Focus MK3 / Mondeo MK4 (MS-CAN)', '125kbps', '500kbps', 'testing')
 ON CONFLICT (id) DO NOTHING;
 
--- Seed Default Admin & Customer Accounts with valid bcrypt hashes
--- admin123 hash: $2a$10$ptsAmVATYBKAd3KemXq2g.b57hS38VJn6Z0e.2cZK07YenBAdgOT2
--- user123 hash:  $2a$10$qEf6GosGRzHX2Aip26iL2O1mxo4R3ozjyPOtGWcFTzAwi5fb15VEG
+-- Seed Default Admin & Customer Accounts
 INSERT INTO users (id, name, email, password_hash, role)
 VALUES 
     ('usr_admin_1', 'Admin Rendszergazda', 'admin@smartcar.hu', '$2a$10$ptsAmVATYBKAd3KemXq2g.b57hS38VJn6Z0e.2cZK07YenBAdgOT2', 'admin'),
     ('usr_imre_2', 'Imre (Mercedes GL Tulajdonos)', 'imre@smartcar.hu', '$2a$10$qEf6GosGRzHX2Aip26iL2O1mxo4R3ozjyPOtGWcFTzAwi5fb15VEG', 'user')
 ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
--- Seed Default Vehicle (Mercedes GL W164)
+-- Seed Default Vehicles
 INSERT INTO vehicles (vin, name, plate, owner_id, can_profile_id, device_id, status)
 VALUES 
-    ('WDC1648221A491726', 'Mercedes-Benz GL 320 CDI (W164)', 'ABC-123', 'usr_imre_2', 'mb_w164', 'ESP32_W164_001', 'online')
+    ('WDC1648221A491726', 'Mercedes-Benz GL 320 CDI (W164)', 'ABC-123', 'usr_imre_2', 'mb_w164', 'ESP32_W164_001', 'online'),
+    ('VF1LZ0B0541234567', 'Renault Fluence 1.5 dCi', 'XYZ-789', 'usr_imre_2', 'renault_fluence', 'ESP32_FLUENCE_002', 'online'),
+    ('WBANX31000C123456', 'BMW 530d (E60)', 'LMN-456', 'usr_imre_2', 'bmw_e60', 'ESP32_E60_003', 'online')
 ON CONFLICT (vin) DO NOTHING;
 
 -- Seed Default DTC Logs
