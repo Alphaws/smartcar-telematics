@@ -1,109 +1,6 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: smartcar-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./backend/src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 3s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal-net
-
-  redis:
-    image: redis:7-alpine
-    container_name: smartcar-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal-net
-
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: smartcar-mosquitto
-    restart: always
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto-data:/mosquitto/data
-    networks:
-      - traefik-net
-      - internal-net
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: smartcar-backend
-    restart: always
-    environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - PORT=${PORT:-5000}
-      - DB_HOST=${DB_HOST:-postgres}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_NAME=${POSTGRES_DB}
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - JWT_SECRET=${JWT_SECRET}
-    networks:
-      - traefik-net
-      - internal-net
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      mosquitto:
-        condition: service_started
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik"
-      - "traefik.http.routers.smartcar-api.rule=Host(`api.smartcar.localhost`)"
-      - "traefik.http.routers.smartcar-api.entrypoints=websecure"
-      - "traefik.http.routers.smartcar-api.tls=true"
-      - "traefik.http.services.smartcar-api.loadbalancer.server.port=5000"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: smartcar-frontend
-    restart: always
-    networks:
-      - traefik-net
-      - internal-net
-    depends_on:
-      - backend
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik"
-      - "traefik.http.routers.smartcar-web.rule=Host(`smartcar.localhost`)"
-      - "traefik.http.routers.smartcar-web.entrypoints=websecure"
-      - "traefik.http.routers.smartcar-web.tls=true"
-      - "traefik.http.services.smartcar-web.loadbalancer.server.port=80"
-
+  # Local Emulators streaming 4G telematics data to the production server at prstart.hu (193.31.27.135)
+  
   # 1. Emulator: Mercedes-Benz GL 320 CDI
   emulator-mercedes:
     build:
@@ -112,17 +9,12 @@ services:
     container_name: smartcar-emulator-mercedes
     restart: always
     environment:
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
+      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
       - DEVICE_ID=ESP32_W164_001
       - VIN=WDC1648221A491726
       - CAR_NAME=Mercedes-Benz GL 320 CDI (W164)
       - LAT_OFFSET=0
       - LNG_OFFSET=0
-    networks:
-      - internal-net
-    depends_on:
-      - mosquitto
-      - backend
 
   # 2. Emulator: Renault Fluence
   emulator-renault:
@@ -132,17 +24,12 @@ services:
     container_name: smartcar-emulator-renault
     restart: always
     environment:
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
+      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
       - DEVICE_ID=ESP32_FLUENCE_002
       - VIN=VF1LZ0B0541234567
       - CAR_NAME=Renault Fluence 1.5 dCi
       - LAT_OFFSET=0.012
       - LNG_OFFSET=-0.015
-    networks:
-      - internal-net
-    depends_on:
-      - mosquitto
-      - backend
 
   # 3. Emulator: BMW 530d E60
   emulator-bmw:
@@ -152,26 +39,9 @@ services:
     container_name: smartcar-emulator-bmw
     restart: always
     environment:
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
+      - MQTT_BROKER_URL=mqtt://193.31.27.135:1883
       - DEVICE_ID=ESP32_E60_003
       - VIN=WBANX31000C123456
       - CAR_NAME=BMW 530d (E60)
       - LAT_OFFSET=-0.018
       - LNG_OFFSET=0.020
-    networks:
-      - internal-net
-    depends_on:
-      - mosquitto
-      - backend
-
-networks:
-  traefik-net:
-    external: true
-    name: traefik
-  internal-net:
-    driver: bridge
-
-volumes:
-  mosquitto-data:
-  postgres-data:
-  redis-data:

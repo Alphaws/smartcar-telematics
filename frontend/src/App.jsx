@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { 
   Car, Shield, Lock, Unlock, Wind, Gauge, Fuel, Thermometer, 
-  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, PlusCircle, Clock
+  BatteryCharging, MapPin, AlertTriangle, CheckCircle, RefreshCw, LogOut, PlusCircle, Clock, ChevronDown
 } from 'lucide-react';
 import L from 'leaflet';
 
@@ -73,8 +73,8 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         setVehicles(data);
-        if (data.length > 0 && !selectedVin) {
-          setSelectedVin(data[0].vin);
+        if (data.length > 0) {
+          setSelectedVin(prev => prev && data.some(v => v.vin === prev) ? prev : data[0].vin);
         }
       })
       .catch(err => console.error('Fetch vehicles error:', err));
@@ -252,6 +252,32 @@ export default function App() {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* VEHICLE SELECTOR DROPDOWN */}
+          {vehicles.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0, 242, 254, 0.08)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(0, 242, 254, 0.3)' }}>
+              <Car size={18} style={{ color: '#00f2fe' }} />
+              <select 
+                value={selectedVin || ''} 
+                onChange={e => setSelectedVin(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {vehicles.map(v => (
+                  <option key={v.vin} value={v.vin} style={{ background: '#0a0e17' }}>
+                    {v.name} ({v.plate})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button className="btn-secondary" onClick={() => setShowAddVehicleForm(true)}>
             <PlusCircle size={18} /> Új Autó Felvétele
           </button>
@@ -278,6 +304,29 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* MULTI-VEHICLE SELECTOR BAR */}
+      {vehicles.length > 1 && (
+        <div className="card" style={{ padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '600' }}>Válassz Járművet:</span>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {vehicles.map(v => (
+              <button 
+                key={v.vin}
+                className={`btn-secondary ${selectedVin === v.vin ? 'active-tab' : ''}`}
+                onClick={() => setSelectedVin(v.vin)}
+                style={{ 
+                  background: selectedVin === v.vin ? '#00f2fe' : undefined, 
+                  color: selectedVin === v.vin ? '#000' : undefined,
+                  fontWeight: '700'
+                }}
+              >
+                <Car size={16} /> {v.name} ({v.plate}) [{v.status === 'online' ? 'ONLINE' : 'VÁRAKOZIK'}]
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {toastMessage && (
