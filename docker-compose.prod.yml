@@ -1,0 +1,116 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartcar-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartcar_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartcar_secret_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-smartcar_telematics}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartcar_user} -d ${POSTGRES_DB:-smartcar_telematics}"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartcar-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: smartcar-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - traefik
+      - internal-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartcar-backend
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-smartcar_user}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-smartcar_secret_pass}
+      - DB_NAME=${POSTGRES_DB:-smartcar_telematics}
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-production_secure_jwt_secret_token_smartcar_2026}
+    networks:
+      - traefik
+      - internal-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.smartcar-api.rule=Host(`api-smartcar.prstart.hu`)"
+      - "traefik.http.routers.smartcar-api.entrypoints=websecure"
+      - "traefik.http.routers.smartcar-api.tls.certresolver=myresolver"
+      - "traefik.http.services.smartcar-api.loadbalancer.server.port=5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartcar-frontend
+    restart: always
+    networks:
+      - traefik
+      - internal-net
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.smartcar-web.rule=Host(`smartcar.prstart.hu`)"
+      - "traefik.http.routers.smartcar-web.entrypoints=websecure"
+      - "traefik.http.routers.smartcar-web.tls.certresolver=myresolver"
+      - "traefik.http.services.smartcar-web.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+  internal-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  postgres-data:
+  redis-data:
