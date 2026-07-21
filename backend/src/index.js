@@ -540,16 +540,21 @@ app.get('/api/admin/security-logs', verifyToken, verifyAdmin, async (req, res) =
   }
 });
 
-// Periodic Telemetry Simulation
+// Dynamic Device Heartbeat Timeout Monitor (Every 5 seconds)
+// Automatically sets vehicle status to 'offline' if no 4G telematics pings are received for 15 seconds
 setInterval(() => {
-  const gl = vehiclesCache['WDC1648221A491726'];
-  if (gl && gl.status === 'online') {
-    gl.telemetry.lat = Number((gl.telemetry.lat + (Math.random() - 0.5) * 0.0001).toFixed(6));
-    gl.telemetry.lng = Number((gl.telemetry.lng + (Math.random() - 0.5) * 0.0001).toFixed(6));
-    gl.telemetry.batteryVoltage = Number((12.5 + Math.random() * 0.3).toFixed(2));
-    gl.lastUpdate = new Date().toISOString();
-    io.emit('vehicle_update', gl);
-  }
+  const now = Date.now();
+  Object.values(vehiclesCache).forEach(vehicle => {
+    const lastPingTime = new Date(vehicle.lastUpdate).getTime();
+    const isHeartbeatActive = (now - lastPingTime) < 15000; // 15 seconds timeout
+    const calculatedStatus = isHeartbeatActive ? 'online' : 'offline';
+
+    if (vehicle.status !== calculatedStatus) {
+      console.log(`[HEARTBEAT MONITOR] Jármű ${vehicle.name} (${vehicle.vin}) állapota megváltozott: ${vehicle.status} ➔ ${calculatedStatus}`);
+      vehicle.status = calculatedStatus;
+      io.emit('vehicle_update', vehicle);
+    }
+  });
 }, 5000);
 
 // Socket.IO
